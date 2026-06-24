@@ -36,8 +36,12 @@ public struct ImportCoordinator {
     /// raw samples are dropped, keeping peak memory bounded (issue #355).
     public func importAppleHealth(
         from url: URL,
-        retainRawSamples: Bool = true
+        retainRawSamples: Bool = true,
+        progress: AppleHealthImporter.ProgressHandler? = nil
     ) throws -> AppleHealthImportResult {
+        if let progress {
+            return try AppleHealthImporter(retainRawSamples: retainRawSamples, progress: progress).import(from: url)
+        }
         // Reuse the injected importer when its flag already matches (keeps any
         // custom importer the caller supplied); otherwise build one with the
         // requested retention so callers can opt into bounded memory per-call.

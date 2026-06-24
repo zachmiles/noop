@@ -282,6 +282,35 @@ final class AppleHealthAggregatorTests: XCTestCase {
         XCTAssertEqual(n.rem, 0, accuracy: 1e-9)
     }
 
+    func testSleepDoesNotDoubleCountOverlappingLegacyAndStageIntervals() {
+        let start = Fixtures.utc(2024, 3, 13, 1, 0, 0)
+        let coreEnd = Fixtures.utc(2024, 3, 13, 2, 0, 0)
+        let deepEnd = Fixtures.utc(2024, 3, 13, 2, 30, 0)
+        let intervals = [
+            sleep(.asleepUnspecified, from: start, to: deepEnd),
+            sleep(.asleepCore, from: start, to: coreEnd),
+            sleep(.asleepDeep, from: coreEnd, to: deepEnd),
+        ]
+        let m = AppleHealthAggregator.sleepDaily(intervals)
+        let n = try! XCTUnwrap(m["2024-03-13"])
+        XCTAssertEqual(n.core, 60, accuracy: 1e-9)
+        XCTAssertEqual(n.deep, 30, accuracy: 1e-9)
+        XCTAssertEqual(n.asleep, 90, accuracy: 1e-9)
+    }
+
+    func testSleepAddsNonOverlappingNapToWakeDay() {
+        let nightStart = Fixtures.utc(2024, 3, 13, 1, 0, 0)
+        let nightEnd = Fixtures.utc(2024, 3, 13, 7, 0, 0)
+        let napStart = Fixtures.utc(2024, 3, 13, 20, 0, 0)
+        let napEnd = Fixtures.utc(2024, 3, 13, 20, 30, 0)
+        let m = AppleHealthAggregator.sleepDaily([
+            sleep(.asleepCore, from: nightStart, to: nightEnd),
+            sleep(.asleepCore, from: napStart, to: napEnd),
+        ])
+        let n = try! XCTUnwrap(m["2024-03-13"])
+        XCTAssertEqual(n.asleep, 390, accuracy: 1e-9)
+    }
+
     func testUnknownSleepStageIgnored() {
         let start = Fixtures.utc(2024, 3, 14, 1, 0, 0)
         let end = Fixtures.utc(2024, 3, 14, 2, 0, 0)

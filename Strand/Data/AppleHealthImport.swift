@@ -6,15 +6,50 @@ import StrandImport
 /// source id ("apple-health"), so it sits BESIDE Whoop for the per-source pages and cross-source
 /// consensus. Populates appleDaily, dailyMetric, the generic metricSeries, and workouts.
 enum AppleHealthImport {
+    enum ProgressEvent {
+        case cacheLookup
+        case cacheHit(days: Int, records: Int)
+        case cacheMiss
+        case parsing(AppleHealthImporter.ParseProgress)
+        case mapping
+        case caching
+        case writing(step: String, completed: Int?, total: Int?)
+    }
+
+    private static let cacheVersion = 3
+
+    private struct CachePayload: Codable {
+        var version: Int
+        var fingerprint: String
+        var summary: ImportSummary
+        var appleRows: [AppleDaily]
+        var dailyMetrics: [DailyMetric]
+        var metricPoints: [MetricPoint]
+        var sleepSessions: [CachedSleepSession]
+        var workouts: [WorkoutRow]
+    }
 
     @discardableResult
-    static func importExport(url: URL, into store: WhoopStore, deviceId: String) async throws -> ImportSummary {
+    static func importExport(url: URL, into store: WhoopStore, deviceId: String,
+                             progress: ((ProgressEvent) -> Void)? = nil) async throws -> ImportSummary {
+        progress?(.cacheLookup)
+        let fingerprint = try cacheFingerprint(for: url)
+        if let cached = loadCache(fingerprint: fingerprint) {
+            progress?(.cacheHit(days: cached.dailyMetrics.count, records: cached.summary.recordCount))
+            try await write(cached, into: store, deviceId: deviceId, progress: progress)
+            return cached.summary
+        }
+        progress?(.cacheMiss)
+
         // retainRawSamples:false — a multi-year export is millions of HealthSample
         // structs (hundreds of MB to >1 GB); iOS jetsam-kills the app if we hold
         // them all (issue #355). The importer folds them into per-day aggregates
         // incrementally and drops the raw array; `aggregate` consumes the
         // pre-folded `sampleDailies`.
-        let result = try ImportCoordinator().importAppleHealth(from: url, retainRawSamples: false)
+        let result = try ImportCoordinator().importAppleHealth(from: url, retainRawSamples: false) { snapshot in
+            progress?(.parsing(snapshot))
+        }
+        progress?(.mapping)
         let daily = AppleHealthAggregator.aggregate(result)
 
         // Apple-specific daily aggregates (steps/energy/vo2/hr/weight).
@@ -27,7 +62,6 @@ enum AppleHealthImport {
                        walkingHr: d.walkingHr.map { Int($0.rounded()) },
                        weightKg: d.weightKg)
         }
-        try await store.upsertAppleDaily(appleRows, deviceId: deviceId)
 
         // Recovery-relevant subset into dailyMetric (recovery/strain are nil — Apple doesn't compute them).
         let dm = daily.map { d in
@@ -39,18 +73,15 @@ enum AppleHealthImport {
                         avgHrv: d.hrvSDNN, recovery: nil, strain: nil, exerciseCount: nil,
                         spo2Pct: d.spo2Pct, skinTempDevC: nil, respRateBpm: d.respRate)
         }
-        try await store.upsertDailyMetrics(dm, deviceId: deviceId)
 
         // Real Apple sleep intervals from export.xml. Daily aggregates are enough for long-range
         // trends, but sessions need actual stage windows so the Sleep screen can show honest bed/wake
         // timing for nights that came from Apple Watch.
         let sleepSessions = sleepSessions(from: result.sleepIntervals)
-        try await store.upsertSleepSessions(sleepSessions, deviceId: deviceId)
 
         // Everything, generically, for the metric explorer.
         let points = AppleHealthAggregator.metricPoints(daily)
             .map { MetricPoint(day: $0.day, key: $0.key, value: $0.value) }
-        try await store.upsertMetricSeries(points, deviceId: deviceId)
 
         // Workouts.
         let workouts = result.workouts.map { w in
@@ -61,9 +92,89 @@ enum AppleHealthImport {
                        avgHr: nil, maxHr: nil, strain: nil,
                        distanceM: w.distanceM, zonesJSON: nil, notes: nil)
         }
-        try await store.upsertWorkouts(workouts, deviceId: deviceId)
 
-        return result.summary
+        let payload = CachePayload(version: cacheVersion, fingerprint: fingerprint, summary: result.summary,
+                                   appleRows: appleRows, dailyMetrics: dm, metricPoints: points,
+                                   sleepSessions: sleepSessions, workouts: workouts)
+        progress?(.caching)
+        saveCache(payload)
+        try await write(payload, into: store, deviceId: deviceId, progress: progress)
+        return payload.summary
+    }
+
+    private static func write(_ payload: CachePayload, into store: WhoopStore, deviceId: String,
+                              progress: ((ProgressEvent) -> Void)?) async throws {
+        progress?(.writing(step: "Writing daily Apple Health rows", completed: 0, total: 5))
+        try await store.upsertAppleDaily(payload.appleRows, deviceId: deviceId)
+        progress?(.writing(step: "Writing sleep and health summaries", completed: 1, total: 5))
+        try await store.upsertDailyMetrics(payload.dailyMetrics, deviceId: deviceId)
+        progress?(.writing(step: "Writing Apple sleep sessions", completed: 2, total: 5))
+        try await store.upsertSleepSessions(payload.sleepSessions, deviceId: deviceId)
+        progress?(.writing(step: "Writing metric explorer series", completed: 3, total: 5))
+        try await store.upsertMetricSeries(payload.metricPoints, deviceId: deviceId)
+        progress?(.writing(step: "Writing Apple workouts", completed: 4, total: 5))
+        try await store.upsertWorkouts(payload.workouts, deviceId: deviceId)
+        progress?(.writing(step: "Import rows written", completed: 5, total: 5))
+    }
+
+    private static func loadCache(fingerprint: String) -> CachePayload? {
+        let url = cacheURL(fingerprint: fingerprint)
+        guard let data = try? Data(contentsOf: url),
+              let payload = try? JSONDecoder().decode(CachePayload.self, from: data),
+              payload.version == cacheVersion,
+              payload.fingerprint == fingerprint else { return nil }
+        return payload
+    }
+
+    private static func saveCache(_ payload: CachePayload) {
+        let url = cacheURL(fingerprint: payload.fingerprint)
+        do {
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
+                                                    withIntermediateDirectories: true)
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.withoutEscapingSlashes]
+            try encoder.encode(payload).write(to: url, options: [.atomic])
+        } catch {
+            NSLog("AppleHealthImport cache save failed: \(error)")
+        }
+    }
+
+    private static func cacheURL(fingerprint: String) -> URL {
+        let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        return base
+            .appendingPathComponent("noop-apple-health-import-cache", isDirectory: true)
+            .appendingPathComponent("v\(cacheVersion)", isDirectory: true)
+            .appendingPathComponent("\(fingerprint).json")
+    }
+
+    private static func cacheFingerprint(for url: URL) throws -> String {
+        let values = try url.resourceValues(forKeys: [.fileSizeKey, .isDirectoryKey])
+        if values.isDirectory == true {
+            return "dir-\(url.path.hashValue)"
+        }
+        let size = values.fileSize ?? 0
+        var hash: UInt64 = 0xcbf29ce484222325
+        func mix(_ byte: UInt8) {
+            hash ^= UInt64(byte)
+            hash &*= 0x100000001b3
+        }
+        func mix(_ string: String) {
+            for byte in string.utf8 { mix(byte) }
+        }
+        mix("noop-apple-health-cache-v\(cacheVersion)-\(size)")
+
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        let sampleSize = 1 << 20
+        let head = try handle.read(upToCount: min(sampleSize, size)) ?? Data()
+        for byte in head { mix(byte) }
+        if size > sampleSize {
+            try handle.seek(toOffset: UInt64(max(0, size - sampleSize)))
+            let tail = try handle.read(upToCount: sampleSize) ?? Data()
+            for byte in tail { mix(byte) }
+        }
+        return String(format: "%016llx-%lld", hash, Int64(size))
     }
 
     private static func sleepSessions(from intervals: [SleepStageInterval]) -> [CachedSleepSession] {

@@ -612,7 +612,7 @@ public struct WearableImportResult: Sendable, Equatable {
 
 /// Lightweight summary of an import: how many normalized rows were produced and
 /// the overall date span they cover.
-public struct ImportSummary: Sendable, Equatable {
+public struct ImportSummary: Sendable, Equatable, Codable {
     public var sourceKind: DataSourceKind
     public var recordCount: Int
     public var earliest: Date?

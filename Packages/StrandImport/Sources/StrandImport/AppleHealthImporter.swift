@@ -17,6 +17,15 @@ import ZIPFoundation
 ///   `type+start+end+source+value` removes any residual duplicates.
 /// - Dates `yyyy-MM-dd HH:mm:ss Z` parsed with `Locale(en_US_POSIX)`.
 public struct AppleHealthImporter {
+    public struct ParseProgress: Sendable, Equatable {
+        public let relevantRecords: Int
+        public let sleepIntervals: Int
+        public let workouts: Int
+        public let latestType: String?
+        public let countsByType: [String: Int]
+    }
+
+    public typealias ProgressHandler = @Sendable (ParseProgress) -> Void
 
     /// When `true` (the default) the parsed `[HealthSample]` array is retained on
     /// the result — what every existing test and call site expects. The app's
@@ -25,9 +34,11 @@ public struct AppleHealthImporter {
     /// peak memory bounded (issue #355). The per-day `sampleDailies` are always
     /// produced regardless of this flag.
     public let retainRawSamples: Bool
+    private let progress: ProgressHandler?
 
-    public init(retainRawSamples: Bool = true) {
+    public init(retainRawSamples: Bool = true, progress: ProgressHandler? = nil) {
         self.retainRawSamples = retainRawSamples
+        self.progress = progress
     }
 
     /// Health types Strand cares about (prefix already stripped).
@@ -161,7 +172,7 @@ public struct AppleHealthImporter {
         _ parser: XMLParser,
         sanitizer: SanitizingInputStream? = nil
     ) throws -> AppleHealthImportResult {
-        let delegate = HealthXMLDelegate(retainRawSamples: retainRawSamples)
+        let delegate = HealthXMLDelegate(retainRawSamples: retainRawSamples, progress: progress)
         parser.delegate = delegate
         parser.shouldProcessNamespaces = false
         let ok = parser.parse()
@@ -233,9 +244,11 @@ final class HealthXMLDelegate: NSObject, XMLParserDelegate {
     /// bounded memory budget (issue #355). `true` keeps the raw array for
     /// callers/tests that need it.
     let retainRawSamples: Bool
+    private let progress: AppleHealthImporter.ProgressHandler?
 
-    init(retainRawSamples: Bool = true) {
+    init(retainRawSamples: Bool = true, progress: AppleHealthImporter.ProgressHandler? = nil) {
         self.retainRawSamples = retainRawSamples
+        self.progress = progress
         super.init()
     }
 
@@ -263,6 +276,9 @@ final class HealthXMLDelegate: NSObject, XMLParserDelegate {
     /// Count of distinct (post-dedupe) samples folded in — the `samples.count`
     /// equivalent for the summary's recordCount when raw samples were dropped.
     private var sampleCount = 0
+    private var relevantRecordCount = 0
+    private var lastProgressRecordCount = 0
+    private let progressStride = 5_000
 
     // Element nesting stack (just the element names).
     private var stack: [String] = []
@@ -354,6 +370,7 @@ final class HealthXMLDelegate: NSObject, XMLParserDelegate {
         guard let rawType = attrs["type"] else { return }
         let type = Self.stripPrefix(rawType)
         guard AppleHealthImporter.relevantTypes.contains(type) else { return }
+        relevantRecordCount += 1
 
         guard
             let startStr = attrs["startDate"],
@@ -397,6 +414,7 @@ final class HealthXMLDelegate: NSObject, XMLParserDelegate {
                 tzOffsetMin: endOffset,
                 sourceName: source
             )
+            reportProgress(latestType: type)
             return
         }
 
@@ -417,6 +435,7 @@ final class HealthXMLDelegate: NSObject, XMLParserDelegate {
             sourceName: source
         )
         countsByType[type, default: 0] += 1
+        reportProgress(latestType: type)
     }
 
     private func appendSample(
@@ -513,6 +532,7 @@ final class HealthXMLDelegate: NSObject, XMLParserDelegate {
         // incremental date span too (matches the prior summary).
         if earliestDate == nil || start < earliestDate! { earliestDate = start }
         if latestDate == nil || start > latestDate! { latestDate = start }
+        reportProgress(latestType: "Workout", force: true)
     }
 
     // MARK: Result
@@ -521,6 +541,7 @@ final class HealthXMLDelegate: NSObject, XMLParserDelegate {
     /// (sanitizer-scrubbed illegal-byte runs, plus 1 if a hard parse error truncated the tail) so the
     /// summary reports a partial import honestly instead of looking complete.
     func makeResult(extraSkippedSpans: Int = 0) -> AppleHealthImportResult {
+        reportProgress(latestType: nil, force: true)
         // Build the summary from incrementally-tracked values, NOT from `samples`
         // (which is empty when raw samples were dropped — issue #355).
         // `sampleCount` is the post-dedupe sample count, matching the old
@@ -540,6 +561,18 @@ final class HealthXMLDelegate: NSObject, XMLParserDelegate {
             summary: summary,
             sampleDailies: dailyAcc.finish()
         )
+    }
+
+    private func reportProgress(latestType: String?, force: Bool = false) {
+        guard let progress else { return }
+        guard force || relevantRecordCount - lastProgressRecordCount >= progressStride else { return }
+        lastProgressRecordCount = relevantRecordCount
+        progress(AppleHealthImporter.ParseProgress(
+            relevantRecords: relevantRecordCount,
+            sleepIntervals: sleepIntervals.count,
+            workouts: workouts.count,
+            latestType: latestType,
+            countsByType: countsByType))
     }
 
     // MARK: Helpers

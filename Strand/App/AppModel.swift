@@ -14,6 +14,18 @@ enum DataSourceImportKind {
     case xiaomi
 }
 
+struct AppleHealthImportProgress: Equatable {
+    var step: String
+    var detail: String?
+    var completed: Int?
+    var total: Int?
+
+    var fraction: Double? {
+        guard let completed, let total, total > 0 else { return nil }
+        return min(1.0, max(0.0, Double(completed) / Double(total)))
+    }
+}
+
 /// Root app state: owns the live BLE connection state and the CoreBluetooth engine.
 /// More subsystems (Repository, AnalyticsEngine, ImportCoordinator) get wired in here
 /// in later milestones.
@@ -146,6 +158,8 @@ final class AppModel: ObservableObject {
     @Published var whoopImportSummary: String?
     /// Last Apple Health import result surfaced in the Apple Health card.
     @Published var appleHealthImportSummary: String?
+    /// Current Apple Health import/backfill phase for the Data Sources card.
+    @Published var appleHealthImportProgress: AppleHealthImportProgress?
     /// Last Xiaomi / Mi Band import result surfaced in the Mi Band card.
     @Published var xiaomiImportSummary: String?
     /// Typed failure flags per source — the summary's warning styling reads these instead of
@@ -1390,6 +1404,9 @@ final class AppModel: ObservableObject {
 
     func importAppleHealth(url: URL) {
         beginImport(.appleHealth)
+        appleHealthImportProgress = AppleHealthImportProgress(
+            step: "Preparing Apple Health export",
+            detail: "Opening the selected file…")
         // FIX 2(c): run the parse+writes at `.utility` so a large Apple Health import yields to UI
         // rendering instead of inheriting the user-initiated QoS of the calling tap — the import's bulk
         // work was contending with the main actor and contributing to the transient post-import lag.
@@ -1397,18 +1414,49 @@ final class AppModel: ObservableObject {
             let scoped = url.startAccessingSecurityScopedResource()
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
             do {
+                appleHealthImportProgress = AppleHealthImportProgress(
+                    step: "Opening local health database",
+                    detail: "Preparing the on-device store…")
                 guard let store = await repo.storeHandle() else {
+                    appleHealthImportProgress = AppleHealthImportProgress(
+                        step: "Apple Health import failed",
+                        detail: "Couldn't open the local store.")
                     finishImport(.appleHealth, summary: "Couldn't open the local store.", failed: true)
                     return
                 }
+                appleHealthImportProgress = AppleHealthImportProgress(
+                    step: "Copying export for import",
+                    detail: "Keeping the original zip untouched…")
                 let local = try await Self.materializeForImport(url)
                 defer { local.cleanup() }
-                let summary = try await AppleHealthImport.importExport(url: local.url, into: store, deviceId: appleDeviceId)
+                appleHealthImportProgress = AppleHealthImportProgress(
+                    step: "Parsing Apple Health export",
+                    detail: "Streaming records, sleep intervals and workouts…")
+                let deviceId = appleDeviceId
+                let progressHandler: (AppleHealthImport.ProgressEvent) -> Void = { [weak self] event in
+                    Task { @MainActor [weak self] in
+                        self?.applyAppleHealthImportProgress(event)
+                    }
+                }
+                let summary = try await Task.detached(priority: .utility) {
+                    try await AppleHealthImport.importExport(url: local.url, into: store,
+                                                            deviceId: deviceId,
+                                                            progress: progressHandler)
+                }.value
+                appleHealthImportProgress = AppleHealthImportProgress(
+                    step: "Compacting database",
+                    detail: "Finishing bulk writes…")
                 try? await store.checkpointWAL()   // reclaim the WAL a bulk import grew (#590)
+                appleHealthImportProgress = AppleHealthImportProgress(
+                    step: "Refreshing dashboards",
+                    detail: "Loading the newly imported Apple Health rows…")
                 await repo.refresh()
                 startAppleHealthProjection(reset: true)
                 finishImport(.appleHealth, summary: "Imported \(summary.recordCount) records")
             } catch {
+                appleHealthImportProgress = AppleHealthImportProgress(
+                    step: "Apple Health import failed",
+                    detail: "\(error)")
                 finishImport(.appleHealth, summary: "Import failed: \(error)", failed: true)
             }
         }
@@ -1541,14 +1589,73 @@ final class AppModel: ObservableObject {
         appleProjectionTask = Task(priority: .utility) { @MainActor [weak self] in
             guard let self else { return }
             defer { self.appleProjectionTask = nil }
+            self.appleHealthImportProgress = AppleHealthImportProgress(
+                step: "Backfilling Apple Health history",
+                detail: "Preparing daily sleep and health projections…")
             var status = await self.repo.projectAppleHealthHistoryBatch()
+            self.publishAppleProjectionProgress(status)
             while !Task.isCancelled && !status.isComplete {
                 try? await Task.sleep(nanoseconds: 100_000_000)
                 status = await self.repo.projectAppleHealthHistoryBatch()
+                self.publishAppleProjectionProgress(status)
             }
             if status.total > 0 {
                 await self.repo.refresh()
             }
+        }
+    }
+
+    private func publishAppleProjectionProgress(_ status: AppleHealthProjectionStatus) {
+        guard status.total > 0 else { return }
+        let detail: String
+        if status.isComplete {
+            detail = "Backfilled \(status.total) Apple Health days."
+        } else if let day = status.cursorDay {
+            detail = "Processed through \(day)."
+        } else {
+            detail = "Starting historical projection…"
+        }
+        appleHealthImportProgress = AppleHealthImportProgress(
+            step: status.isComplete ? "Apple Health backfill complete" : "Backfilling Apple Health history",
+            detail: detail,
+            completed: status.processed,
+            total: status.total)
+    }
+
+    private func applyAppleHealthImportProgress(_ event: AppleHealthImport.ProgressEvent) {
+        switch event {
+        case .cacheLookup:
+            appleHealthImportProgress = AppleHealthImportProgress(
+                step: "Checking Apple Health import cache",
+                detail: "Looking for a previous parse of this export…")
+        case .cacheHit(let days, let records):
+            appleHealthImportProgress = AppleHealthImportProgress(
+                step: "Using cached Apple Health parse",
+                detail: "Replaying \(records) records across \(days) days without re-reading export.xml.")
+        case .cacheMiss:
+            appleHealthImportProgress = AppleHealthImportProgress(
+                step: "Parsing Apple Health export",
+                detail: "No cache for this export yet. Streaming export.xml…")
+        case .parsing(let snapshot):
+            let latest = snapshot.latestType.map { " · \($0)" } ?? ""
+            let detail = "\(snapshot.relevantRecords) records\(latest) · \(snapshot.sleepIntervals) sleep intervals · \(snapshot.workouts) workouts"
+            appleHealthImportProgress = AppleHealthImportProgress(
+                step: "Parsing Apple Health export",
+                detail: detail)
+        case .mapping:
+            appleHealthImportProgress = AppleHealthImportProgress(
+                step: "Indexing Apple Health data",
+                detail: "Building daily metrics, sleep sessions and explorer series…")
+        case .caching:
+            appleHealthImportProgress = AppleHealthImportProgress(
+                step: "Caching parsed Apple Health data",
+                detail: "Saving a compact replay cache for this export…")
+        case .writing(let step, let completed, let total):
+            appleHealthImportProgress = AppleHealthImportProgress(
+                step: step,
+                detail: "Writing cached rows into the local health database…",
+                completed: completed,
+                total: total)
         }
     }
 
@@ -1562,6 +1669,7 @@ final class AppModel: ObservableObject {
         case .appleHealth:
             appleHealthImportSummary = nil
             appleHealthImportFailed = false
+            appleHealthImportProgress = nil
         case .xiaomi:
             xiaomiImportSummary = nil
             xiaomiImportFailed = false

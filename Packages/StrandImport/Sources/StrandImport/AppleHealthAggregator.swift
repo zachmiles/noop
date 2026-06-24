@@ -185,19 +185,50 @@ public enum AppleHealthAggregator {
         }
         var byDay: [String: Night] = [:]
 
-        for iv in intervals {
-            let minutes = max(0, iv.end.timeIntervalSince(iv.start)) / 60.0
+        let dayKeys = Set(intervals.filter { $0.end > $0.start }.map {
+            localDay($0.end, tzOffsetMin: $0.tzOffsetMin)
+        })
+        let valid = intervals.filter { $0.stage != .unknown && $0.end > $0.start }
+        let grouped = Dictionary(grouping: valid) { iv in
             // Wake day = local day of the interval end.
-            let day = localDay(iv.end, tzOffsetMin: iv.tzOffsetMin)
-            var n = byDay[day] ?? Night()
-            switch iv.stage {
-            case .asleepDeep:        n.deep += minutes
-            case .asleepREM:         n.rem += minutes
-            case .asleepCore:        n.core += minutes
-            case .asleepUnspecified: n.unspecified += minutes
-            case .awake:             n.awake += minutes
-            case .inBed:             n.inBed += minutes
-            case .unknown:           break
+            localDay(iv.end, tzOffsetMin: iv.tzOffsetMin)
+        }
+
+        for day in dayKeys {
+            byDay[day] = Night()
+        }
+
+        for (day, dayIntervals) in grouped {
+            var n = Night()
+            let inBedRanges = dayIntervals
+                .filter { $0.stage == .inBed }
+                .map { ($0.start, $0.end) }
+            n.inBed = unionMinutes(inBedRanges)
+
+            let staged = dayIntervals.filter { $0.stage != .inBed }
+            let boundaries = Array(Set(staged.flatMap { [$0.start, $0.end] })).sorted()
+            guard boundaries.count >= 2 else {
+                byDay[day] = n
+                continue
+            }
+
+            for i in 0..<(boundaries.count - 1) {
+                let start = boundaries[i]
+                let end = boundaries[i + 1]
+                guard end > start else { continue }
+                let covering = staged.filter { $0.start < end && $0.end > start }
+                guard let stage = covering.map(\.stage).max(by: { sleepStagePriority($0) < sleepStagePriority($1) }) else {
+                    continue
+                }
+                let minutes = end.timeIntervalSince(start) / 60.0
+                switch stage {
+                case .asleepDeep:        n.deep += minutes
+                case .asleepREM:         n.rem += minutes
+                case .asleepCore:        n.core += minutes
+                case .asleepUnspecified: n.unspecified += minutes
+                case .awake:             n.awake += minutes
+                case .inBed, .unknown:   break
+                }
             }
             byDay[day] = n
         }
@@ -208,6 +239,34 @@ public enum AppleHealthAggregator {
             out[day] = (asleep: asleep, deep: n.deep, rem: n.rem, core: n.core, awake: n.awake, inBed: n.inBed)
         }
         return out
+    }
+
+    private static func sleepStagePriority(_ stage: SleepStage) -> Int {
+        switch stage {
+        case .awake: return 5
+        case .asleepDeep, .asleepREM, .asleepCore: return 4
+        case .asleepUnspecified: return 3
+        case .inBed: return 1
+        case .unknown: return 0
+        }
+    }
+
+    private static func unionMinutes(_ ranges: [(Date, Date)]) -> Double {
+        let sorted = ranges
+            .filter { $0.1 > $0.0 }
+            .sorted { $0.0 < $1.0 }
+        guard var current = sorted.first else { return 0 }
+        var total = 0.0
+        for range in sorted.dropFirst() {
+            if range.0 <= current.1 {
+                current.1 = max(current.1, range.1)
+            } else {
+                total += current.1.timeIntervalSince(current.0)
+                current = range
+            }
+        }
+        total += current.1.timeIntervalSince(current.0)
+        return total / 60.0
     }
 
     // MARK: - Full merge

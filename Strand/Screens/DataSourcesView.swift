@@ -158,6 +158,9 @@ struct DataSourcesView: View {
                 .disabled(model.hasActiveImport || nutritionImporting || liftingImporting || activityFileImporting || appleHealthDeleting)
                 if importingAppleHealth { ProgressView().controlSize(.small) }
             }
+            if let progress = model.appleHealthImportProgress {
+                appleHealthProgressBlock(progress)
+            }
             if let s = model.appleHealthImportSummary {
                 Text(s).font(StrandFont.subhead)
                     .foregroundStyle(model.appleHealthImportFailed ? StrandPalette.statusWarning : StrandPalette.statusPositive)
@@ -182,6 +185,39 @@ struct DataSourcesView: View {
                     .foregroundStyle(StrandPalette.statusPositive)
             }
         }
+    }
+
+    private func appleHealthProgressBlock(_ progress: AppleHealthImportProgress) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(progress.step)
+                    .font(StrandFont.subhead.weight(.semibold))
+                    .foregroundStyle(StrandPalette.textPrimary)
+                Spacer(minLength: 8)
+                if let completed = progress.completed, let total = progress.total, total > 0 {
+                    Text("\(completed)/\(total)")
+                        .font(StrandFont.captionNumber)
+                        .foregroundStyle(StrandPalette.textTertiary)
+                }
+            }
+            if let fraction = progress.fraction {
+                ProgressView(value: fraction)
+                    .tint(StrandPalette.metricCyan)
+            } else {
+                ProgressView()
+                    .controlSize(.small)
+                    .tint(StrandPalette.metricCyan)
+            }
+            if let detail = progress.detail {
+                Text(detail)
+                    .font(StrandFont.footnote)
+                    .foregroundStyle(StrandPalette.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(12)
+        .background(StrandPalette.metricCyan.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(StrandPalette.metricCyan.opacity(0.24), lineWidth: 1))
     }
 
     private var xiaomiCard: some View {
