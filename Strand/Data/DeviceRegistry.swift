@@ -29,7 +29,13 @@ final class DeviceRegistry: ObservableObject {
     /// Load the device list and active id from the store. Best-effort: on any error the published
     /// values are left untouched (keeping the safe "my-whoop" fallback), never crashing.
     func reload() {
-        guard let rows = try? store.all() else { return }
+        guard var rows = try? store.all() else { return }
+        if let active = rows.first(where: { $0.status == .active }),
+           active.sourceKind == .renphoScale,
+           let wearable = rows.first(where: { $0.status != .archived && $0.sourceKind != .renphoScale }) {
+            try? store.setActive(wearable.id)
+            rows = (try? store.all()) ?? rows
+        }
         devices = rows
         if let active = rows.first(where: { $0.status == .active })?.id {
             activeDeviceId = active

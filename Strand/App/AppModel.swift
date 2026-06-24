@@ -73,6 +73,9 @@ final class AppModel: ObservableObject {
     /// every no-strap case): it only acts when a non-WHOOP generic strap becomes the active device,
     /// pausing WHOOP and running the isolated `StandardHRSource`. nil until wired (post store-open).
     private(set) var sourceCoordinator: SourceCoordinator?
+    /// Latest saved RENPHO scale reading, shown on the Devices card so a paired scale has an immediate
+    /// "it wrote data" confirmation instead of only silently populating Explore.
+    @Published private(set) var latestRenphoScaleReading: RenphoScaleReadingSnapshot?
 
     /// Timestamps of moments marked via a double-tap (persisted).
     @Published var moments: [Date] = []
@@ -359,9 +362,20 @@ final class AppModel: ObservableObject {
     /// `startWhoop`/`stopWhoop` are thin closures over BLEManager's EXISTING public methods (via the
     /// model's `scan()` / `disconnect()`), so the coordinator never references BLEManager directly.
     private func wireSourceCoordinator() async {
-        guard sourceCoordinator == nil, let store = await repo.storeHandle() else { return }
+        guard sourceCoordinator == nil else {
+            diagnosticLog("Device coordinator: already wired")
+            return
+        }
+        guard let store = await repo.storeHandle() else {
+            diagnosticLog("Device coordinator: store unavailable; scale listener not wired")
+            return
+        }
         let registry = DeviceRegistry(store: DeviceRegistryStore(dbQueue: store.registryQueue))
         registry.reload()
+        let devices = registry.devices
+            .map { "\($0.id):\($0.sourceKind.rawValue):\($0.status.rawValue):peripheral=\($0.peripheralId ?? "nil")" }
+            .joined(separator: "; ")
+        diagnosticLog("Device coordinator: registry loaded \(registry.devices.count) device(s): \(devices.isEmpty ? "none" : devices)")
         let coordinator = SourceCoordinator(
             registry: registry,
             live: live,
@@ -377,15 +391,17 @@ final class AppModel: ObservableObject {
             // The engine's last-connected WHOOP uuid drives first-connect identity adoption.
             connectedPeripheralUUID: ble.$connectedPeripheralUUID.eraseToAnyPublisher(),
             renphoProfile: { [weak self] in self?.renphoScaleProfile() },
+            renphoReadingSaved: { [weak self] reading in self?.recordRenphoScaleReading(reading) },
             // Generic-HR connect lifecycle → the SAME strap log BLEManager writes to (`live.append(log:)`),
             // so a "connected but no data" report (issue #421) is no longer blind to the Polar/Wahoo/etc
             // path. Timestamp matches BLEManager.log()'s "HH:mm:ss" so the lines read consistently.
             straplog: { [weak self] line in
-                self?.live.append(log: "[\(AppModel.logTimeFormatter.string(from: Date()))] \(line)")
+                self?.diagnosticLog(line)
             })
         coordinator.start()
         self.deviceRegistry = registry
         self.sourceCoordinator = coordinator
+        await refreshLatestRenphoScaleReading()
     }
 
     private func renphoScaleProfile() -> RenphoScaleSource.Profile? {
@@ -399,6 +415,42 @@ final class AppModel: ObservableObject {
         return RenphoScaleSource.Profile(sex: sex,
                                          age: profile.age,
                                          heightM: profile.heightCm / 100.0)
+    }
+
+    private func recordRenphoScaleReading(_ reading: RenphoScaleSource.Reading) {
+        diagnosticLog("RENPHO scale: app received saved reading \(String(format: "%.1f", reading.weightKg)) kg for \(reading.day) with \(reading.metrics.count) metrics")
+        latestRenphoScaleReading = RenphoScaleReadingSnapshot(day: reading.day,
+                                                              measuredAt: reading.measuredAt,
+                                                              weightKg: reading.weightKg,
+                                                              bodyFatPct: reading.bodyFatPct,
+                                                              metrics: reading.metrics)
+        if UserDefaults.standard.bool(forKey: ScaleIntegrationPrefs.buzzWhoopOnRenphoReadingKey) {
+            diagnosticLog("RENPHO scale: buzzing WHOOP for saved reading")
+            buzz(loops: 1)
+        } else {
+            diagnosticLog("RENPHO scale: WHOOP buzz is disabled for scale readings")
+        }
+        NotificationCenter.default.post(name: ScaleIntegrationPrefs.renphoReadingSavedNotification,
+                                        object: reading)
+        Task { [weak self] in
+            guard let self else { return }
+            await self.repo.refresh(days: 120)
+            await self.refreshLatestRenphoScaleReading()
+            let detail = self.latestRenphoScaleReading.map {
+                "\(String(format: "%.1f", $0.weightKg)) kg on \($0.day)"
+            } ?? "none"
+            self.diagnosticLog("RENPHO scale: dashboard refreshed; latest stored reading = \(detail)")
+        }
+    }
+
+    func refreshLatestRenphoScaleReading() async {
+        latestRenphoScaleReading = await repo.latestRenphoScaleReading()
+    }
+
+    private func diagnosticLog(_ line: String) {
+        let stamped = "[\(AppModel.logTimeFormatter.string(from: Date()))] \(line)"
+        live.append(log: stamped)
+        print(stamped)
     }
 
     private func refreshAfterCompletedBackfill() async {
@@ -701,7 +753,9 @@ final class AppModel: ObservableObject {
     func registerDevice(_ device: PairedDevice, makeActive: Bool) {
         guard let registry = deviceRegistry else { return }
         registry.add(device)
-        if makeActive { registry.setActive(device.id) }
+        if makeActive, device.sourceKind != .renphoScale {
+            registry.setActive(device.id)
+        }
     }
 
     /// How many on-screen surfaces currently want the realtime HR stream (the Live tab and the

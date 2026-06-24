@@ -71,6 +71,11 @@ final class HealthKitBridge: ObservableObject {
     private var writeTypes: Set<HKSampleType> {
         var s = Set<HKSampleType>()
         for id in HealthKitBridge.quantityWriteIds { if let t = HKObjectType.quantityType(forIdentifier: id) { s.insert(t) } }
+        if UserDefaults.standard.bool(forKey: ScaleIntegrationPrefs.writeRenphoToAppleHealthKey) {
+            for id in HealthKitBridge.bodyCompositionWriteIds {
+                if let t = HKObjectType.quantityType(forIdentifier: id) { s.insert(t) }
+            }
+        }
         if let sleep = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) { s.insert(sleep) }
         return s
     }
@@ -88,6 +93,9 @@ final class HealthKitBridge: ObservableObject {
     ]
     private static let quantityWriteIds: [HKQuantityTypeIdentifier] = [
         .restingHeartRate, .heartRateVariabilitySDNN, .oxygenSaturation, .respiratoryRate
+    ]
+    private static let bodyCompositionWriteIds: [HKQuantityTypeIdentifier] = [
+        .bodyMass, .bodyFatPercentage, .leanBodyMass, .bodyMassIndex
     ]
 
     // MARK: - Authorization
@@ -187,16 +195,16 @@ final class HealthKitBridge: ObservableObject {
         // Body composition — READ-ONLY import under the apple-health source (#20). Weight, lean mass
         // and BMI are point-in-time readings, so take the latest-of-day; body-fat reads fine as a
         // daily average. Body-fat HealthKit gives a 0…1 fraction, scaled to percent like spo2 above.
-        await collect(.bodyMass, unit: .gramUnit(with: .kilo), start: start, end: end, op: .discreteMostRecent) { day, v in
+        await collect(.bodyMass, unit: .gramUnit(with: .kilo), start: start, end: end, op: .mostRecent) { day, v in
             var a = agg(day); a.weightKg = v; byDay[day] = a
         }
         await collect(.bodyFatPercentage, unit: .percent(), start: start, end: end, op: .discreteAverage) { day, v in
             var a = agg(day); a.bodyFatPct = v * 100; byDay[day] = a   // 0…1 → percent
         }
-        await collect(.leanBodyMass, unit: .gramUnit(with: .kilo), start: start, end: end, op: .discreteMostRecent) { day, v in
+        await collect(.leanBodyMass, unit: .gramUnit(with: .kilo), start: start, end: end, op: .mostRecent) { day, v in
             var a = agg(day); a.leanMassKg = v; byDay[day] = a
         }
-        await collect(.bodyMassIndex, unit: .count(), start: start, end: end, op: .discreteMostRecent) { day, v in
+        await collect(.bodyMassIndex, unit: .count(), start: start, end: end, op: .mostRecent) { day, v in
             var a = agg(day); a.bmi = v; byDay[day] = a
         }
 
@@ -264,6 +272,7 @@ final class HealthKitBridge: ObservableObject {
             try await store.upsertDailyMetrics(dmRows, deviceId: appleDeviceId)
             try await store.upsertMetricSeries(points, deviceId: appleDeviceId)
             try await writeBack(whoopStore: store)
+            try await writeBackScaleReadings(whoopStore: store)
             lastSync = Date()
             lastError = nil
         } catch {
@@ -348,6 +357,146 @@ final class HealthKitBridge: ObservableObject {
         try await self.store.save(candidates.map { $0.sample })
     }
 
+    func writeRenphoScaleReading(_ reading: RenphoScaleSource.Reading) async {
+        guard UserDefaults.standard.bool(forKey: ScaleIntegrationPrefs.writeRenphoToAppleHealthKey) else {
+            Self.scaleLog("Apple Health write skipped for \(reading.day); setting is off")
+            return
+        }
+        guard auth == .authorized else {
+            Self.scaleLog("Apple Health write skipped for \(reading.day); auth=\(auth)")
+            return
+        }
+        do {
+            Self.scaleLog("Apple Health writing live scale reading for \(reading.day): \(reading.metrics.keys.sorted().joined(separator: ", "))")
+            try await ensureBodyCompositionWriteAuthorization()
+            try await writeScaleReading(day: reading.day,
+                                        measuredAt: reading.measuredAt,
+                                        metrics: reading.metrics)
+            Self.scaleLog("Apple Health wrote live scale reading for \(reading.day)")
+            lastError = nil
+        } catch {
+            Self.scaleLog("Apple Health write failed for \(reading.day): \(error.localizedDescription)")
+            lastError = "Scale → Apple Health failed: \(error.localizedDescription)"
+        }
+    }
+
+    func writeLatestRenphoScaleReading() async {
+        guard UserDefaults.standard.bool(forKey: ScaleIntegrationPrefs.writeRenphoToAppleHealthKey) else {
+            Self.scaleLog("Apple Health backfill skipped; setting is off")
+            return
+        }
+        guard auth == .authorized else {
+            Self.scaleLog("Apple Health backfill skipped; auth=\(auth)")
+            return
+        }
+        guard let localStore = await repo.storeHandle() else {
+            Self.scaleLog("Apple Health backfill skipped; local store is unavailable")
+            return
+        }
+        do {
+            Self.scaleLog("Apple Health backfill starting for latest RENPHO readings")
+            try await ensureBodyCompositionWriteAuthorization()
+            try await writeBackScaleReadings(whoopStore: localStore, days: 4000)
+            Self.scaleLog("Apple Health backfill completed for latest RENPHO readings")
+            lastError = nil
+        } catch {
+            Self.scaleLog("Apple Health backfill failed: \(error.localizedDescription)")
+            lastError = "Scale → Apple Health failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func writeBackScaleReadings(whoopStore: WhoopStore, days: Int = 14) async throws {
+        guard UserDefaults.standard.bool(forKey: ScaleIntegrationPrefs.writeRenphoToAppleHealthKey),
+              auth == .authorized else { return }
+        try await ensureBodyCompositionWriteAuthorization()
+
+        let cal = Calendar.current
+        let to = HealthKitBridge.dayString(Date())
+        guard let fromDate = cal.date(byAdding: .day, value: -days, to: Date()) else { return }
+        let from = HealthKitBridge.dayString(fromDate)
+        let keys = ["weight", "body_fat", "lean_mass", "bmi"]
+        var byDay: [String: [String: Double]] = [:]
+        for key in keys {
+            let points = try await whoopStore.metricSeries(deviceId: Repository.renphoScaleSource,
+                                                           key: key,
+                                                           from: from,
+                                                           to: to)
+            for point in points {
+                byDay[point.day, default: [:]][key] = point.value
+            }
+        }
+        Self.scaleLog("Apple Health backfill found \(byDay.count) RENPHO day(s) from \(from) to \(to)")
+
+        for day in byDay.keys.sorted() {
+            guard let date = HealthKitBridge.date(from: day) else { continue }
+            let noon = cal.date(bySettingHour: 12, minute: 0, second: 0, of: date) ?? date
+            try await writeScaleReading(day: day, measuredAt: noon, metrics: byDay[day] ?? [:])
+        }
+    }
+
+    private func ensureBodyCompositionWriteAuthorization() async throws {
+        let bodyTypes = bodyCompositionSampleTypes
+        guard !bodyTypes.isEmpty else { return }
+        let missing = bodyTypes.contains { store.authorizationStatus(for: $0) != .sharingAuthorized }
+        guard missing else { return }
+        try await store.requestAuthorization(toShare: Set(bodyTypes), read: Set<HKObjectType>())
+    }
+
+    private var bodyCompositionSampleTypes: [HKQuantityType] {
+        HealthKitBridge.bodyCompositionWriteIds.compactMap { HKQuantityType.quantityType(forIdentifier: $0) }
+    }
+
+    private func writeScaleReading(day: String, measuredAt: Date, metrics: [String: Double]) async throws {
+        struct Candidate { let type: HKQuantityType; let key: String; let sample: HKQuantitySample }
+        var candidates: [Candidate] = []
+
+        func add(_ id: HKQuantityTypeIdentifier, unit: HKUnit, value: Double) {
+            guard let type = HKQuantityType.quantityType(forIdentifier: id) else { return }
+            let key = "noop:\(Repository.renphoScaleSource):\(id.rawValue):\(day)"
+            let sample = HKQuantitySample(
+                type: type,
+                quantity: .init(unit: unit, doubleValue: value),
+                start: measuredAt,
+                end: measuredAt,
+                metadata: [HKMetadataKeyExternalUUID: key]
+            )
+            candidates.append(Candidate(type: type, key: key, sample: sample))
+        }
+
+        if let weightKg = metrics["weight"] {
+            add(.bodyMass, unit: .gramUnit(with: .kilo), value: weightKg)
+        }
+        if let bodyFatPct = metrics["body_fat"] {
+            add(.bodyFatPercentage, unit: .percent(), value: bodyFatPct / 100.0)
+        }
+        if let leanMassKg = metrics["lean_mass"] {
+            add(.leanBodyMass, unit: .gramUnit(with: .kilo), value: leanMassKg)
+        }
+        if let bmi = metrics["bmi"] {
+            add(.bodyMassIndex, unit: .count(), value: bmi)
+        }
+        guard !candidates.isEmpty else {
+            Self.scaleLog("Apple Health write skipped for \(day); no body composition candidates")
+            return
+        }
+
+        let bySource = HKQuery.predicateForObjects(from: HKSource.default())
+        let grouped = Dictionary(grouping: candidates, by: { $0.type })
+        for (type, items) in grouped {
+            let keys = Array(Set(items.map { $0.key }))
+            let byKey = HKQuery.predicateForObjects(withMetadataKey: HKMetadataKeyExternalUUID,
+                                                    allowedValues: keys)
+            let pred = NSCompoundPredicate(andPredicateWithSubpredicates: [bySource, byKey])
+            _ = try? await self.store.deleteObjects(of: type, predicate: pred)
+        }
+        Self.scaleLog("Apple Health saving \(candidates.count) scale sample(s) for \(day)")
+        try await self.store.save(candidates.map { $0.sample })
+    }
+
+    private static func scaleLog(_ message: String) {
+        print("RENPHO scale: \(message)")
+    }
+
     private struct DayAgg {
         var restingHr: Double?; var avgHr: Double?; var maxHr: Double?; var hrv: Double?
         var spo2: Double?; var respRate: Double?; var steps: Double?
@@ -384,7 +533,7 @@ final class HealthKitBridge: ObservableObject {
                     case .cumulativeSum:     q = stats.sumQuantity()
                     case .discreteAverage:   q = stats.averageQuantity()
                     case .discreteMax:       q = stats.maximumQuantity()
-                    case .discreteMostRecent: q = stats.mostRecentQuantity()
+                    case .mostRecent:         q = stats.mostRecentQuantity()
                     default:                 q = stats.averageQuantity()
                     }
                     if let q { sink(HealthKitBridge.dayString(stats.startDate), q.doubleValue(for: unit)) }

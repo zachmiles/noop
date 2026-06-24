@@ -6436,6 +6436,9 @@
         }
       }
     },
+    "Buzz WHOOP when a reading saves" : {
+
+    },
     "Buzz your strap or mark a moment from Siri, Spotlight, the Shortcuts app, or a Back-Tap / automation — no setup needed." : {
       "localizations" : {
         "de" : {
@@ -15984,6 +15987,16 @@
         }
       }
     },
+    "Last reading %@: %@%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Last reading %1$@: %2$@%3$@"
+          }
+        }
+      }
+    },
     "Last sleep" : {
       "localizations" : {
         "de" : {
@@ -16456,6 +16469,9 @@
           }
         }
       }
+    },
+    "Listening" : {
+
     },
     "Live" : {
       "localizations" : {
@@ -27322,6 +27338,9 @@
         }
       }
     },
+    "Share scale readings to Apple Health" : {
+
+    },
     "Sharing %lld bpm. Waiting for a device to pair." : {
       "localizations" : {
         "de" : {
@@ -31222,6 +31241,9 @@
         }
       }
     },
+    "This scale stays paired as a background accessory. It does not replace your active WHOOP; NOOP listens for it whenever it wakes and saves the final reading automatically." : {
+
+    },
     "This session" : {
       "localizations" : {
         "de" : {
@@ -34127,6 +34149,7 @@
       }
     },
     "WHOOP is NOOP's primary, fully-supported band. Other heart-rate straps are an early, in-development addition — they stream live heart rate and HRV, but not WHOOP's deeper sleep and recovery data." : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -34147,6 +34170,9 @@
           }
         }
       }
+    },
+    "WHOOP is NOOP's primary, fully-supported band. Other heart-rate straps can become active live sources. Body scales are passive accessories: pair once, then NOOP listens in the background when the scale wakes up." : {
+
     },
     "WHOOP is NOOP's primary, fully-supported band. Other heart-rate straps stream live heart rate and HRV, but not WHOOP's deeper sleep and recovery data." : {
       "localizations" : {
@@ -34633,6 +34659,9 @@
           }
         }
       }
+    },
+    "Writes RENPHO weight, body fat, lean mass and BMI as NOOP-authored Health samples." : {
+
     },
     "Yes" : {
       "localizations" : {

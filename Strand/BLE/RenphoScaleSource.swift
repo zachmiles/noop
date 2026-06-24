@@ -39,8 +39,9 @@ public final class RenphoScaleSource: NSObject, ObservableObject {
         }
     }
 
-    public struct Reading: Equatable {
+    public struct Reading: Equatable, Sendable {
         public let day: String
+        public let measuredAt: Date
         public let weightKg: Double
         public let bodyFatPct: Double?
         public let resistance1: Int?
@@ -55,6 +56,7 @@ public final class RenphoScaleSource: NSObject, ObservableObject {
 
     private static let notifyChar = CBUUID(string: "FFF1")
     private static let commandChar = CBUUID(string: "FFF2")
+    private static let qnScaleService = CBUUID(string: "FFE0")
     private static let batteryService = CBUUID(string: "180F")
     private static let batteryLevel = CBUUID(string: "2A19")
     private static let firmwareRevision = CBUUID(string: "2A26")
@@ -62,7 +64,10 @@ public final class RenphoScaleSource: NSObject, ObservableObject {
     private static let epochOffset = 946_656_000
     private static let defaultVendorByte: UInt8 = 0xFF
     private static let guestUserId: UInt8 = 0xFE
+    private static let kilogramUnitByte: UInt8 = 0x01
+    private static let poundUnitByte: UInt8 = 0x02
 
+    private let displayUnitByteProvider: () -> UInt8
     private let profileProvider: () -> Profile?
     private let deviceIdForPeripheral: (UUID) -> String?
     private let persist: (String, Reading) -> Void
@@ -74,6 +79,11 @@ public final class RenphoScaleSource: NSObject, ObservableObject {
     private var pendingConnectID: UUID?
     private var seenPeripherals: [UUID: CBPeripheral] = [:]
     private var commandCharacteristic: CBCharacteristic?
+    private var commandWriteType: CBCharacteristicWriteType = .withResponse
+    private var writeCharacteristics: [String: (characteristic: CBCharacteristic, writeType: CBCharacteristicWriteType)] = [:]
+    private var measurementCharacteristicIDs: Set<String> = []
+    private var notifyReady = false
+    private var handshakeStarted = false
     private var vendorByte = RenphoScaleSource.defaultVendorByte
     private var stateMask = 0
     private var resolverSent = false
@@ -83,11 +93,13 @@ public final class RenphoScaleSource: NSObject, ObservableObject {
     private let stateProfile = 1 << 2
     private let stateBasicFinal = 1 << 3
 
-    public init(profileProvider: @escaping () -> Profile? = { nil },
+    public init(displayUnitByteProvider: (() -> UInt8)? = nil,
+                profileProvider: @escaping () -> Profile? = { nil },
                 deviceIdForPeripheral: @escaping (UUID) -> String? = { _ in nil },
                 persist: @escaping (String, Reading) -> Void = { _, _ in },
                 log: @escaping (String) -> Void = { _ in },
                 discoveryOnly: Bool = false) {
+        self.displayUnitByteProvider = displayUnitByteProvider ?? { RenphoScaleSource.defaultDisplayUnitByte() }
         self.profileProvider = profileProvider
         self.deviceIdForPeripheral = deviceIdForPeripheral
         self.persist = persist
@@ -143,6 +155,9 @@ public final class RenphoScaleSource: NSObject, ObservableObject {
         if let p = peripheral { central.cancelPeripheralConnection(p) }
         peripheral = nil
         commandCharacteristic = nil
+        commandWriteType = .withResponse
+        writeCharacteristics.removeAll()
+        measurementCharacteristicIDs.removeAll()
         resetSession()
     }
 
@@ -150,6 +165,8 @@ public final class RenphoScaleSource: NSObject, ObservableObject {
         vendorByte = Self.defaultVendorByte
         stateMask = 0
         resolverSent = false
+        notifyReady = false
+        handshakeStarted = false
     }
 
     private func shouldShow(_ peripheral: CBPeripheral, advertisementData: [String: Any]) -> Bool {
@@ -181,6 +198,7 @@ public final class RenphoScaleSource: NSObject, ObservableObject {
         guard payload.count >= 2 else { return }
         let opcode = payload[0]
         let length = payload[1]
+        log("RENPHO scale: notify opcode=0x\(hex(opcode)) len=\(Int(length)) bytes=\(hex(payload))")
         updateVendorByte(from: payload, opcode: opcode)
 
         switch (opcode, length) {
@@ -207,6 +225,12 @@ public final class RenphoScaleSource: NSObject, ObservableObject {
         write(command)
     }
 
+    private func startHandshakeIfReady() {
+        guard !handshakeStarted, notifyReady, hasCommandTarget else { return }
+        handshakeStarted = true
+        log("RENPHO scale: measurement listener ready; waiting for scale requests")
+    }
+
     private func sendProfileIfNeeded() {
         guard stateMask & stateProfile == 0 else { return }
         stateMask |= stateProfile
@@ -225,12 +249,16 @@ public final class RenphoScaleSource: NSObject, ObservableObject {
         guard payload.count >= 14 else { return }
         let status = payload[4]
         let weight = Double(UInt16(payload[5]) << 8 | UInt16(payload[6])) / 100.0
+        log("RENPHO scale: extended measurement status=\(Int(status)) weight=\(String(format: "%.1f", weight)) kg")
         if status == 1, !resolverSent, profileProvider() != nil {
             resolverSent = true
             write(buildProfileCommand(profileProvider()!))
             return
         }
-        guard status == 2 else { return }
+        guard status == 2 else {
+            log("RENPHO scale: waiting for final extended measurement")
+            return
+        }
 
         let rawBodyFat = UInt16(payload[11]) << 8 | UInt16(payload[12])
         let bodyFat = rawBodyFat == 0 ? nil : Double(rawBodyFat) / 10.0
@@ -247,7 +275,11 @@ public final class RenphoScaleSource: NSObject, ObservableObject {
     private func handleBasicMeasurement(_ payload: Data, name: String, id: UUID) {
         guard payload.count >= 11 else { return }
         let status = payload[5]
-        guard status == 0x01 else { return }
+        log("RENPHO scale: basic measurement status=\(Int(status))")
+        guard status == 0x01 else {
+            log("RENPHO scale: waiting for final basic measurement")
+            return
+        }
         guard stateMask & stateBasicFinal == 0 else { return }
         stateMask |= stateBasicFinal
 
@@ -283,31 +315,63 @@ public final class RenphoScaleSource: NSObject, ObservableObject {
                 metrics.merge(Self.derivedMetrics(weightKg: weightKg, bodyFatPct: bodyFatPct, profile: profile)) { _, new in new }
             }
         }
-        let reading = Reading(day: Repository.localDayKey(Date()),
+        let measuredAt = Date()
+        let reading = Reading(day: Repository.localDayKey(measuredAt),
+                              measuredAt: measuredAt,
                               weightKg: round1(weightKg),
                               bodyFatPct: bodyFatPct.map(round1),
                               resistance1: resistance1,
                               resistance2: resistance2,
                               metrics: metrics)
         latest = reading
-        log("RENPHO scale: final reading from \(name): \(String(format: "%.1f", weightKg)) kg")
-        guard let deviceId = deviceIdForPeripheral(id) else { return }
+        log("RENPHO scale: final reading from \(name): \(String(format: "%.1f", weightKg)) kg, metrics=\(metricSummary(metrics))")
+        guard let deviceId = deviceIdForPeripheral(id) else {
+            log("RENPHO scale: final reading did not match a paired scale peripheral \(id); not saved")
+            return
+        }
+        log("RENPHO scale: persisting final reading for paired device \(deviceId)")
         persist(deviceId, reading)
     }
 
     private func write(_ data: Data) {
-        guard let peripheral, let commandCharacteristic else {
+        guard let peripheral else {
+            log("RENPHO scale: peripheral unavailable for command write")
+            return
+        }
+        let targets = commandTargets(for: data)
+        guard !targets.isEmpty else {
             log("RENPHO scale: command characteristic unavailable")
             return
         }
-        peripheral.writeValue(data, for: commandCharacteristic, type: .withResponse)
+        for target in targets {
+            log("RENPHO scale: writing command \(hex(data)) to \(target.characteristic.uuid) type=\(target.writeType == .withResponse ? "withResponse" : "withoutResponse")")
+            peripheral.writeValue(data, for: target.characteristic, type: target.writeType)
+        }
+    }
+
+    private var hasCommandTarget: Bool {
+        commandCharacteristic != nil || !writeCharacteristics.isEmpty
+    }
+
+    private func commandTargets(for data: Data) -> [(characteristic: CBCharacteristic, writeType: CBCharacteristicWriteType)] {
+        if let shared = writeCharacteristics[Self.commandChar.uuidString] {
+            return [shared]
+        }
+        if let config = writeCharacteristics["FFE3"] {
+            return [config]
+        }
+        if let commandCharacteristic {
+            return [(commandCharacteristic, commandWriteType)]
+        }
+        return []
     }
 
     private func buildUnitCommand() -> Data {
         var payload = [UInt8](repeating: 0, count: 9)
         payload[0] = 0x13; payload[1] = 0x09; payload[2] = vendorByte
-        payload[3] = 0x01; payload[4] = 0x10
+        payload[3] = displayUnitByteProvider(); payload[4] = 0x10
         payload[8] = checksum(payload[0..<8])
+        log("RENPHO scale: setting display unit to \(payload[3] == Self.poundUnitByte ? "lb" : "kg")")
         return Data(payload)
     }
 
@@ -315,10 +379,10 @@ public final class RenphoScaleSource: NSObject, ObservableObject {
         var payload = [UInt8](repeating: 0, count: 8)
         payload[0] = 0x20; payload[1] = 0x08; payload[2] = vendorByte
         let ts = UInt32(max(0, Int(Date().timeIntervalSince1970) - Self.epochOffset))
-        payload[3] = UInt8((ts >> 24) & 0xFF)
-        payload[4] = UInt8((ts >> 16) & 0xFF)
-        payload[5] = UInt8((ts >> 8) & 0xFF)
-        payload[6] = UInt8(ts & 0xFF)
+        payload[3] = UInt8(ts & 0xFF)
+        payload[4] = UInt8((ts >> 8) & 0xFF)
+        payload[5] = UInt8((ts >> 16) & 0xFF)
+        payload[6] = UInt8((ts >> 24) & 0xFF)
         payload[7] = checksum(payload[0..<7])
         return Data(payload)
     }
@@ -356,10 +420,32 @@ public final class RenphoScaleSource: NSObject, ObservableObject {
     private func round1(_ value: Double) -> Double {
         (value * 10.0).rounded() / 10.0
     }
+
+    private func metricSummary(_ metrics: [String: Double]) -> String {
+        metrics.keys.sorted().map { key in
+            let value = metrics[key] ?? 0
+            return "\(key)=\(String(format: "%.1f", value))"
+        }
+        .joined(separator: ", ")
+    }
+
+    private func hex(_ byte: UInt8) -> String {
+        String(format: "%02X", byte)
+    }
+
+    private func hex(_ data: Data) -> String {
+        data.map { hex($0) }.joined(separator: " ")
+    }
+
+    nonisolated private static func defaultDisplayUnitByte() -> UInt8 {
+        let raw = UserDefaults.standard.string(forKey: UnitPrefs.systemKey) ?? UnitSystem.metric.rawValue
+        return UnitSystem(rawValue: raw) == .imperial ? poundUnitByte : kilogramUnitByte
+    }
 }
 
 extension RenphoScaleSource: @preconcurrency CBCentralManagerDelegate {
     public func centralManagerDidUpdateState(_ central: CBCentralManager) {
+        log("RENPHO scale: Bluetooth state changed to \(central.state.rawValue)")
         if central.state == .poweredOn {
             if let id = pendingConnectID, let p = seenPeripherals[id] {
                 pendingConnectID = nil
@@ -396,15 +482,25 @@ extension RenphoScaleSource: @preconcurrency CBCentralManagerDelegate {
     }
 
     public func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
-        log("RENPHO scale: connected; discovering services")
+        log("RENPHO scale: connected to \(peripheral.identifier); discovering services")
         peripheral.delegate = self
         peripheral.discoverServices(nil)
     }
 
+    public func centralManager(_ central: CBCentralManager,
+                               didFailToConnect peripheral: CBPeripheral,
+                               error: Error?) {
+        log("RENPHO scale: failed to connect to \(peripheral.identifier): \(error?.localizedDescription ?? "unknown error")")
+        if !discoveryOnly { scan() }
+    }
+
     public func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
-        log("RENPHO scale: disconnected")
+        log("RENPHO scale: disconnected from \(peripheral.identifier): \(error?.localizedDescription ?? "normal")")
         self.peripheral = nil
         commandCharacteristic = nil
+        commandWriteType = .withResponse
+        writeCharacteristics.removeAll()
+        measurementCharacteristicIDs.removeAll()
         resetSession()
         if !discoveryOnly { scan() }
     }
@@ -412,6 +508,11 @@ extension RenphoScaleSource: @preconcurrency CBCentralManagerDelegate {
 
 extension RenphoScaleSource: @preconcurrency CBPeripheralDelegate {
     public func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
+        if let error {
+            log("RENPHO scale: service discovery failed: \(error.localizedDescription)")
+            return
+        }
+        log("RENPHO scale: discovered \(peripheral.services?.count ?? 0) services")
         for service in peripheral.services ?? [] {
             peripheral.discoverCharacteristics(nil, for: service)
         }
@@ -420,12 +521,36 @@ extension RenphoScaleSource: @preconcurrency CBPeripheralDelegate {
     public func peripheral(_ peripheral: CBPeripheral,
                            didDiscoverCharacteristicsFor service: CBService,
                            error: Error?) {
+        if let error {
+            log("RENPHO scale: characteristic discovery failed for \(service.uuid): \(error.localizedDescription)")
+            return
+        }
+        log("RENPHO scale: service \(service.uuid) has \(service.characteristics?.count ?? 0) characteristics")
         for characteristic in service.characteristics ?? [] {
-            if characteristic.uuid == Self.commandChar {
-                commandCharacteristic = characteristic
+            log("RENPHO scale: characteristic \(characteristic.uuid) properties=\(propertySummary(characteristic.properties))")
+            let isCommand = characteristic.uuid == Self.commandChar
+                || (service.uuid == Self.qnScaleService
+                    && (characteristic.properties.contains(.write) || characteristic.properties.contains(.writeWithoutResponse)))
+            let isNotify = characteristic.uuid == Self.notifyChar
+                || (service.uuid == Self.qnScaleService
+                    && (characteristic.properties.contains(.notify) || characteristic.properties.contains(.indicate)))
+
+            if isCommand {
+                let writeType: CBCharacteristicWriteType = characteristic.properties.contains(.write) ? .withResponse : .withoutResponse
+                writeCharacteristics[characteristic.uuid.uuidString] = (characteristic, writeType)
+                if commandCharacteristic == nil {
+                    commandCharacteristic = characteristic
+                    commandWriteType = writeType
+                    log("RENPHO scale: command characteristic ready (\(characteristic.uuid))")
+                } else {
+                    log("RENPHO scale: additional command characteristic ready (\(characteristic.uuid))")
+                }
             }
-            if characteristic.uuid == Self.notifyChar {
+            if isNotify {
+                measurementCharacteristicIDs.insert(characteristic.uuid.uuidString)
                 peripheral.setNotifyValue(true, for: characteristic)
+                notifyReady = true
+                log("RENPHO scale: notification characteristic subscribed (\(characteristic.uuid))")
             }
             if characteristic.uuid == Self.batteryLevel {
                 peripheral.readValue(for: characteristic)
@@ -434,17 +559,53 @@ extension RenphoScaleSource: @preconcurrency CBPeripheralDelegate {
                 peripheral.readValue(for: characteristic)
             }
         }
+        startHandshakeIfReady()
     }
 
     public func peripheral(_ peripheral: CBPeripheral,
                            didUpdateValueFor characteristic: CBCharacteristic,
                            error: Error?) {
+        if let error {
+            log("RENPHO scale: update failed for \(characteristic.uuid): \(error.localizedDescription)")
+            return
+        }
         guard let data = characteristic.value else { return }
-        if characteristic.uuid == Self.notifyChar {
+        if characteristic.uuid == Self.notifyChar || measurementCharacteristicIDs.contains(characteristic.uuid.uuidString) {
             handle(payload: data, name: peripheral.name ?? "RENPHO Scale", id: peripheral.identifier)
         } else if characteristic.uuid == Self.batteryLevel, let pct = data.first {
             batteryPct = Int(pct)
+            log("RENPHO scale: battery \(Int(pct))%")
         }
+    }
+
+    public func peripheral(_ peripheral: CBPeripheral,
+                           didUpdateNotificationStateFor characteristic: CBCharacteristic,
+                           error: Error?) {
+        if let error {
+            log("RENPHO scale: notification state failed for \(characteristic.uuid): \(error.localizedDescription)")
+        } else {
+            log("RENPHO scale: notification state \(characteristic.isNotifying ? "on" : "off") for \(characteristic.uuid)")
+        }
+    }
+
+    public func peripheral(_ peripheral: CBPeripheral,
+                           didWriteValueFor characteristic: CBCharacteristic,
+                           error: Error?) {
+        if let error {
+            log("RENPHO scale: write failed for \(characteristic.uuid): \(error.localizedDescription)")
+        } else {
+            log("RENPHO scale: write acknowledged for \(characteristic.uuid)")
+        }
+    }
+
+    private func propertySummary(_ properties: CBCharacteristicProperties) -> String {
+        var parts: [String] = []
+        if properties.contains(.read) { parts.append("read") }
+        if properties.contains(.write) { parts.append("write") }
+        if properties.contains(.writeWithoutResponse) { parts.append("writeWithoutResponse") }
+        if properties.contains(.notify) { parts.append("notify") }
+        if properties.contains(.indicate) { parts.append("indicate") }
+        return parts.isEmpty ? "none" : parts.joined(separator: "|")
     }
 }
 

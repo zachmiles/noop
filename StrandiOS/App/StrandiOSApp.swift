@@ -100,6 +100,13 @@ struct StrandiOSApp: App {
                         model.handleHealthImportURL(url)
                     }
                 }
+                .onReceive(NotificationCenter.default.publisher(for: ScaleIntegrationPrefs.renphoReadingSavedNotification)) { note in
+                    guard let reading = note.object as? RenphoScaleSource.Reading else { return }
+                    let message = "RENPHO scale: notifying Apple Health bridge for \(reading.day)"
+                    model.live.append(log: message)
+                    print(message)
+                    Task { await health.writeRenphoScaleReading(reading) }
+                }
         }
         // HealthKit authorization is intentionally NOT requested on launch. The system permission
         // dialog without prior in-app rationale violates Apple HIG / App Review guidance — the user

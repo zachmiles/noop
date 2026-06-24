@@ -510,6 +510,18 @@ struct AddDeviceWizard: View {
                             in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .accessibilityLabel("Device name")
 
+            if type == .renphoScale {
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: "dot.radiowaves.left.and.right")
+                        .foregroundStyle(StrandPalette.textTertiary)
+                        .accessibilityHidden(true)
+                    Text("This scale stays paired as a background accessory. It does not replace your active WHOOP; NOOP listens for it whenever it wakes and saves the final reading automatically.")
+                        .font(StrandFont.footnote)
+                        .foregroundStyle(StrandPalette.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
             Button("Add") {
                 if type == .renphoScale {
                     finishAdd(makeActive: false)

@@ -84,6 +84,7 @@ final class SourceCoordinator: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     /// Provides the current body profile for the scale's BIA handshake. nil means weight-only.
     private let renphoProfile: () -> RenphoScaleSource.Profile?
+    private let renphoReadingSaved: (RenphoScaleSource.Reading) -> Void
 
     // MARK: - Init
 
@@ -107,6 +108,7 @@ final class SourceCoordinator: ObservableObject {
          setWhoopActiveDeviceId: @escaping (String) -> Void,
          connectedPeripheralUUID: AnyPublisher<String?, Never>,
          renphoProfile: @escaping () -> RenphoScaleSource.Profile? = { nil },
+         renphoReadingSaved: @escaping (RenphoScaleSource.Reading) -> Void = { _ in },
          straplog: @escaping (String) -> Void = { _ in }) {
         self.registry = registry
         self.live = live
@@ -117,6 +119,7 @@ final class SourceCoordinator: ObservableObject {
         self.setWhoopActiveDeviceId = setWhoopActiveDeviceId
         self.connectedPeripheralUUID = connectedPeripheralUUID
         self.renphoProfile = renphoProfile
+        self.renphoReadingSaved = renphoReadingSaved
         self.straplog = straplog
     }
 
@@ -208,6 +211,17 @@ final class SourceCoordinator: ObservableObject {
     /// Active device is a generic strap. Pause WHOOP (once, on the WHOOP→strap edge) and run the
     /// isolated `StandardHRSource` for this strap's deviceId. Re-running for the SAME id is a no-op.
     private func switchToStrap(id: String) {
+        if sourceKind(for: id) == .renphoScale {
+            let wasOnStrap = onStrap
+            activeStrapId = nil
+            onStrap = false
+            tearDownNonWhoopSource()
+            if let whoop = registry.devices.first(where: { Self.isWhoop($0) && $0.status != .archived }) {
+                pointWhoop(at: whoop.id, peripheralId: whoop.peripheralId)
+                if wasOnStrap { startWhoop() }
+            }
+            return
+        }
         guard activeStrapId != id else { return }   // already streaming this strap → no churn
 
         // Leaving WHOOP for the first non-WHOOP source: pause WHOOP's BLE via its existing teardown.
@@ -302,34 +316,63 @@ final class SourceCoordinator: ObservableObject {
     private func reconcileRenphoScaleListener() {
         let scales = registry.devices.filter { $0.status != .archived && $0.sourceKind == .renphoScale }
         guard !scales.isEmpty else {
-            renphoSource?.stop()
+            if renphoSource != nil {
+                straplog("RENPHO scale: no paired scales remain; stopping background listener")
+                renphoSource?.stop()
+            } else {
+                straplog("RENPHO scale: no paired scales in registry; background listener idle")
+            }
             renphoSource = nil
             return
         }
         if renphoSource == nil {
+            let summary = scales
+                .map { "\($0.id) peripheral=\($0.peripheralId ?? "nil") status=\($0.status.rawValue)" }
+                .joined(separator: "; ")
+            straplog("RENPHO scale: starting background listener for \(scales.count) paired scale(s): \(summary)")
             let storeHandle = self.storeHandle
             let straplog = self.straplog
+            let renphoReadingSaved = self.renphoReadingSaved
             let source = RenphoScaleSource(
                 profileProvider: renphoProfile,
-                deviceIdForPeripheral: { [weak self] uuid in
-                    self?.registry.devices.first {
+                deviceIdForPeripheral: { [weak self, straplog] uuid in
+                    let match = self?.registry.devices.first {
                         $0.sourceKind == .renphoScale
                             && $0.status != .archived
                             && $0.peripheralId == uuid.uuidString
-                    }?.id
+                    }
+                    if let match { return match.id }
+                    let known = self?.registry.devices
+                        .filter { $0.sourceKind == .renphoScale && $0.status != .archived }
+                        .map { $0.peripheralId ?? "nil" }
+                        .joined(separator: ", ") ?? "none"
+                    straplog("RENPHO scale: peripheral \(uuid) is not paired; known paired peripherals: \(known)")
+                    return nil
                 },
                 persist: { [storeHandle, straplog] _, reading in
                     Task {
-                        guard let store = await storeHandle() else { return }
-                        let rows = reading.metrics.map { MetricPoint(day: reading.day, key: $0.key, value: $0.value) }
-                        _ = try? await store.upsertMetricSeries(rows, deviceId: Repository.renphoScaleSource)
-                        straplog("RENPHO scale: saved \(rows.count) body metrics for \(reading.day)")
+                        guard let store = await storeHandle() else {
+                            straplog("RENPHO scale: save skipped for \(reading.day); store is unavailable")
+                            return
+                        }
+                        let rows = reading.metrics
+                            .sorted { $0.key < $1.key }
+                            .map { MetricPoint(day: reading.day, key: $0.key, value: $0.value) }
+                        straplog("RENPHO scale: saving \(rows.count) body metrics for \(reading.day): \(rows.map(\.key).joined(separator: ", "))")
+                        do {
+                            let changed = try await store.upsertMetricSeries(rows, deviceId: Repository.renphoScaleSource)
+                            straplog("RENPHO scale: saved \(rows.count) body metrics for \(reading.day) (changed=\(changed))")
+                            await MainActor.run { renphoReadingSaved(reading) }
+                        } catch {
+                            straplog("RENPHO scale: save failed for \(reading.day): \(error.localizedDescription)")
+                        }
                     }
                 },
                 log: straplog)
             renphoSource = source
             source.scan()
         } else if renphoSource?.scanning == false {
+            straplog("RENPHO scale: listener exists but is not scanning; restarting scan")
             renphoSource?.scan()
         }
     }

@@ -72,6 +72,12 @@ enum UnitPrefs {
     }
 }
 
+enum ScaleIntegrationPrefs {
+    static let writeRenphoToAppleHealthKey = "renpho.appleHealthWriteBack.enabled"
+    static let buzzWhoopOnRenphoReadingKey = "renpho.buzzWhoopOnReading.enabled"
+    static let renphoReadingSavedNotification = Notification.Name("noop.renphoScale.readingSaved")
+}
+
 // MARK: - Pure conversion + formatting
 
 /// Pure, dependency-free unit conversion and display formatting. Every site that prints a distance,

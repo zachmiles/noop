@@ -32,6 +32,11 @@ public struct DeviceRegistryStore: Sendable {
     /// I1: promoting one device demotes whatever was active, atomically (single write transaction).
     public func setActive(_ id: String) throws {
         try dbQueue.write { db in
+            if let rawKind = try String.fetchOne(db, sql: "SELECT sourceKind FROM pairedDevice WHERE id = ? LIMIT 1",
+                                                arguments: [id]),
+               SourceKind(rawValue: rawKind) == .renphoScale {
+                return
+            }
             try db.execute(sql: "UPDATE pairedDevice SET status = 'paired' WHERE status = 'active'")
             try db.execute(sql: "UPDATE pairedDevice SET status = 'active', lastSeenAt = ? WHERE id = ?",
                            arguments: [Int(Date().timeIntervalSince1970), id])

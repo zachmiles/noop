@@ -30,6 +30,7 @@ struct AppleHealthView: View {
     // Imperial/Metric display preference (D#103). Weight and lean mass (stored kg) re-label to lb here;
     // every other Apple Health metric is unit-agnostic. Display-only.
     @AppStorage(UnitPrefs.systemKey) private var unitSystemRaw = UnitSystem.metric.rawValue
+    @AppStorage(ScaleIntegrationPrefs.writeRenphoToAppleHealthKey) private var writeRenphoToAppleHealth = false
     private var unitSystem: UnitSystem { UnitSystem(rawValue: unitSystemRaw) ?? .metric }
     /// kg value → the active mass unit, full string with label (e.g. "74.5 kg" / "164.2 lb").
     private func massLabel(_ kg: Double) -> String { UnitFormatter.massFromKilograms(kg, system: unitSystem) }
@@ -432,6 +433,27 @@ struct AppleHealthView: View {
                     .buttonStyle(.bordered)
                     .tint(StrandPalette.metricCyan)
                     .disabled(health.syncing)
+
+                    Toggle(isOn: $writeRenphoToAppleHealth) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Share scale readings to Apple Health")
+                                .font(StrandFont.subhead)
+                                .foregroundStyle(StrandPalette.textPrimary)
+                            Text("Writes RENPHO weight, body fat, lean mass and BMI as NOOP-authored Health samples.")
+                                .font(StrandFont.caption)
+                                .foregroundStyle(StrandPalette.textTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    .toggleStyle(.switch)
+                    .tint(StrandPalette.metricCyan)
+                    .onChangeCompat(of: writeRenphoToAppleHealth) { enabled in
+                        guard enabled else { return }
+                        Task {
+                            await health.requestAuthorization()
+                            await health.writeLatestRenphoScaleReading()
+                        }
+                    }
                 }
 
                 if let err = health.lastError {

@@ -108,6 +108,14 @@ struct AppleHealthProjectionStatus: Equatable, Sendable {
     static let idle = AppleHealthProjectionStatus()
 }
 
+struct RenphoScaleReadingSnapshot: Equatable, Sendable {
+    let day: String
+    let measuredAt: Date?
+    let weightKg: Double
+    let bodyFatPct: Double?
+    let metrics: [String: Double]
+}
+
 /// Read model over the on-device WhoopStore. Opens its own handle (WAL + busy-timeout makes the
 /// two-handle BLEManager+Repository pattern safe) and publishes the dashboard caches the screens bind to.
 @MainActor
@@ -789,6 +797,38 @@ final class Repository: ObservableObject {
         let to = Self.dayString(now.addingTimeInterval(86_400))
         let pts = (try? await store.metricSeries(deviceId: source, key: key, from: from, to: to)) ?? []
         return pts.map { ($0.day, $0.value) }
+    }
+
+    func latestRenphoScaleReading(days: Int = 4000) async -> RenphoScaleReadingSnapshot? {
+        guard let store = await ensureStore() else { return nil }
+        let now = Date()
+        let from = Self.dayString(now.addingTimeInterval(-Double(days) * 86_400))
+        let to = Self.dayString(now.addingTimeInterval(86_400))
+        let weights = (try? await store.metricSeries(deviceId: Self.renphoScaleSource,
+                                                     key: "weight",
+                                                     from: from,
+                                                     to: to)) ?? []
+        guard let latest = weights.last else { return nil }
+
+        let keys = [
+            "weight", "body_fat", "lean_mass", "bmi",
+            "body_water", "skeletal_muscle", "muscle_mass",
+            "bone_mass", "protein", "bmr",
+        ]
+        var metrics: [String: Double] = ["weight": latest.value]
+        for key in keys where key != "weight" {
+            let pts = (try? await store.metricSeries(deviceId: Self.renphoScaleSource,
+                                                     key: key,
+                                                     from: latest.day,
+                                                     to: latest.day)) ?? []
+            if let point = pts.last { metrics[key] = point.value }
+        }
+
+        return RenphoScaleReadingSnapshot(day: latest.day,
+                                          measuredAt: nil,
+                                          weightKg: latest.value,
+                                          bodyFatPct: metrics["body_fat"],
+                                          metrics: metrics)
     }
 
     @discardableResult

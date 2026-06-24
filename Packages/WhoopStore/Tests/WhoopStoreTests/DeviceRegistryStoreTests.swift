@@ -29,6 +29,20 @@ final class DeviceRegistryStoreTests: XCTestCase {
         XCTAssertEqual(try store.all().filter { $0.status == .active }.count, 1)  // I1
     }
 
+    func testRenphoScaleCannotBecomeActive() throws {
+        let store = DeviceRegistryStore(dbQueue: try makeDB())
+        try store.add(PairedDevice(id: "renpho-1", brand: "RENPHO", model: "ES-CS20M",
+                                   sourceKind: .renphoScale,
+                                   capabilities: [.weight, .bodyComposition],
+                                   status: .paired, addedAt: 1, lastSeenAt: 1))
+        try store.setActive("renpho-1")
+
+        XCTAssertEqual(try store.activeDeviceId(), "my-whoop")
+        let statuses = Dictionary(uniqueKeysWithValues: try store.all().map { ($0.id, $0.status) })
+        XCTAssertEqual(statuses["my-whoop"], .active)
+        XCTAssertEqual(statuses["renpho-1"], .paired)
+    }
+
     func testArchiveKeepsRowAndClearsActive() throws {
         let store = DeviceRegistryStore(dbQueue: try makeDB())
         try store.archive("my-whoop")

@@ -87,6 +87,8 @@ struct TodayView: View {
     /// Distinct days + sleep sessions imported from a Mi Band (Mi Fitness), for the Data Sources row.
     @State private var xiaomiDays = 0
     @State private var xiaomiSleeps = 0
+    /// Latest body-scale reading, surfaced in the Data Sources provenance footer.
+    @State private var latestRenphoScaleReading: RenphoScaleReadingSnapshot?
     @State private var sourceComparisons: [SourceComparison] = []
 
     private struct SourceComparison: Identifiable {
@@ -380,6 +382,15 @@ struct TodayView: View {
         f.setLocalizedDateFormatFromTemplate("dMMM")
         return f.string(from: date)
     }
+
+    /// Short local date for the latest scale-reading provenance row. Includes the year because a
+    /// backfilled body-weight source can legitimately be years old.
+    private static let scaleReadingDateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale.current
+        f.setLocalizedDateFormatFromTemplate("dMMMy")
+        return f
+    }()
 
     /// On-device training-readiness synthesis (HRV / resting-HR / load). Read through the
     /// memoized cache so the full-history sort inside `evaluate` runs once per data change,
@@ -2311,6 +2322,28 @@ struct TodayView: View {
         return detail
     }
 
+    private var renphoScaleSourceDetail: String {
+        guard let reading = latestRenphoScaleReading else { return "No readings yet" }
+        let weight = UnitFormatter.massFromKilograms(reading.weightKg, system: unitSystem)
+        return "\(scaleReadingDateLabel(reading)) · \(weight)"
+    }
+
+    private func scaleReadingDateLabel(_ reading: RenphoScaleReadingSnapshot) -> String {
+        let calendar = Calendar.current
+        if let measuredAt = reading.measuredAt {
+            if calendar.isDateInToday(measuredAt) { return "Today" }
+            if calendar.isDateInYesterday(measuredAt) { return "Yesterday" }
+            return Self.scaleReadingDateFormatter.string(from: measuredAt)
+        }
+        if reading.day == Repository.localDayKey(Date()) { return "Today" }
+        if let yesterday = calendar.date(byAdding: .day, value: -1, to: Date()),
+           reading.day == Repository.localDayKey(yesterday) {
+            return "Yesterday"
+        }
+        guard let date = Self.dayKeyParser.date(from: reading.day) else { return reading.day }
+        return Self.scaleReadingDateFormatter.string(from: date)
+    }
+
     @ViewBuilder
     private var sourcesSection: some View {
         VStack(alignment: .leading, spacing: NoopMetrics.gap) {
@@ -2339,6 +2372,13 @@ struct TodayView: View {
                             detail: "\(xiaomiDays) days · \(xiaomiSleeps) sleeps"
                         )
                     }
+                    Divider().overlay(StrandPalette.hairline)
+                    sourceRow(
+                        badge: "RENPHO Scale",
+                        tint: StrandPalette.statusPositive,
+                        present: latestRenphoScaleReading != nil,
+                        detail: renphoScaleSourceDetail
+                    )
                     strapBatteryRow
                     Divider().overlay(StrandPalette.hairline)
                     strapSyncRow
@@ -2475,6 +2515,7 @@ struct TodayView: View {
         async let appleDaysA         = repo.appleDailyRows()
         async let xStepsA            = repo.series(key: "steps", source: "xiaomi-band")
         async let xSleepA            = repo.series(key: "sleep_total_min", source: "xiaomi-band")
+        async let renphoScaleReadingA = repo.latestRenphoScaleReading()
         async let stressSeriesA      = repo.exploreSeries(key: "stress", source: "my-whoop")
         async let fitnessAgeSeriesA  = repo.exploreSeries(key: "fitness_age", source: "my-whoop")
         async let vitalitySeriesA    = repo.exploreSeries(key: "vitality", source: "my-whoop")
@@ -2531,6 +2572,7 @@ struct TodayView: View {
         let xSteps = await xStepsA
         let xSleep = await xSleepA
         xiaomiDays = Set(xSteps.map(\.day) + xSleep.map(\.day)).count
+        latestRenphoScaleReading = await renphoScaleReadingA
         // Your cards (#582 / Design Reset): latest Stress / Fitness age / Vitality for the pinned home
         // cards. Same merged exploreSeries reads their detail screens use; nil simply hides that card.
         stressToday = (await stressSeriesA).last?.value

@@ -55,6 +55,9 @@ private struct DevicesContent: View {
     @State private var pickNewActive = false
 
     private var activeDevices: [PairedDevice] { registry.devices.filter { $0.status != .archived } }
+    private var activeWearableDevices: [PairedDevice] {
+        activeDevices.filter { $0.sourceKind != .renphoScale }
+    }
     private var removedDevices: [PairedDevice] { registry.devices.filter { $0.status == .archived } }
 
     var body: some View {
@@ -62,12 +65,13 @@ private struct DevicesContent: View {
             ForEach(Array(activeDevices.enumerated()), id: \.element.id) { idx, device in
                 DeviceCard(
                     device: device,
-                    isActive: device.status == .active,
-                    isLiveConnected: device.status == .active && live.connected,
+                    isActive: device.status == .active && device.sourceKind != .renphoScale,
+                    isLiveConnected: device.status == .active && device.sourceKind != .renphoScale && live.connected,
                     // The live battery belongs to whichever device is ACTIVE + connected (the WHOOP, a
                     // generic strap, or an FTMS machine all funnel into live.batteryPct). nil otherwise.
-                    liveBatteryPct: (device.status == .active && live.connected) ? live.batteryPct.map { Int($0.rounded()) } : nil,
-                    onMakeActive: { switchTarget = device },
+                    liveBatteryPct: (device.status == .active && device.sourceKind != .renphoScale && live.connected) ? live.batteryPct.map { Int($0.rounded()) } : nil,
+                    latestRenphoReading: device.sourceKind == .renphoScale ? model.latestRenphoScaleReading : nil,
+                    onMakeActive: device.sourceKind == .renphoScale ? nil : { switchTarget = device },
                     onRename: { renameDraft = device.nickname ?? device.displayName; renameTarget = device },
                     onRemove: { removeTarget = device })
                     .staggeredAppear(index: idx)
@@ -141,12 +145,15 @@ private struct DevicesContent: View {
         .confirmationDialog("Pick a new active strap",
                             isPresented: $pickNewActive,
                             titleVisibility: .visible) {
-            ForEach(activeDevices) { device in
+            ForEach(activeWearableDevices) { device in
                 Button(device.displayName) { registry.setActive(device.id) }
             }
             Button("Leave none active", role: .cancel) { }
         } message: {
             Text("You removed your active strap. Choose which paired band provides your live data, or leave none active and pair one later.")
+        }
+        .task {
+            await model.refreshLatestRenphoScaleReading()
         }
     }
 
@@ -168,10 +175,10 @@ private struct DevicesContent: View {
                     isActive: false,
                     isLiveConnected: false,
                     dimmed: true,
-                    onMakeActive: { switchTarget = device },
+                    onMakeActive: device.sourceKind == .renphoScale ? nil : { switchTarget = device },
                     onRename: { renameDraft = device.nickname ?? device.displayName; renameTarget = device },
                     onRemove: nil,
-                    onReAdd: { registry.setActive(device.id) },
+                    onReAdd: device.sourceKind == .renphoScale ? nil : { registry.setActive(device.id) },
                     onDeleteData: { deleteDataTarget = device })
             }
         }
@@ -182,7 +189,7 @@ private struct DevicesContent: View {
             Image(systemName: "info.circle")
                 .foregroundStyle(StrandPalette.textTertiary)
                 .accessibilityHidden(true)
-            Text("WHOOP is NOOP's primary, fully-supported band. Other heart-rate straps are an early, in-development addition — they stream live heart rate and HRV, but not WHOOP's deeper sleep and recovery data.")
+            Text("WHOOP is NOOP's primary, fully-supported band. Other heart-rate straps can become active live sources. Body scales are passive accessories: pair once, then NOOP listens in the background when the scale wakes up.")
                 .font(StrandFont.footnote)
                 .foregroundStyle(StrandPalette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -208,7 +215,7 @@ private struct DevicesContent: View {
         removeTarget = nil
         if wasActive {
             // Other paired devices left → ask which becomes active; otherwise no active device remains.
-            if !activeDevices.isEmpty {
+            if !activeWearableDevices.isEmpty {
                 pickNewActive = true
             }
         }
@@ -227,13 +234,16 @@ private struct DeviceCard: View {
     /// for WHOOP, a generic strap, or an FTMS machine. nil when not the active/connected device or
     /// the source hasn't reported a battery (e.g. a strap/machine without the 0x180F service).
     var liveBatteryPct: Int? = nil
+    var latestRenphoReading: RenphoScaleReadingSnapshot? = nil
     var dimmed: Bool = false
-    var onMakeActive: () -> Void
+    var onMakeActive: (() -> Void)?
     var onRename: () -> Void
     var onRemove: (() -> Void)?
     /// Removed-section affordances (re-add as active / delete its data).
     var onReAdd: (() -> Void)? = nil
     var onDeleteData: (() -> Void)? = nil
+    @AppStorage(UnitPrefs.systemKey) private var unitSystemRaw = UnitSystem.metric.rawValue
+    @AppStorage(ScaleIntegrationPrefs.buzzWhoopOnRenphoReadingKey) private var buzzWhoopOnScaleReading = false
 
     var body: some View {
         StrandCard(padding: 18, tint: isActive ? StrandPalette.accent : nil) {
@@ -271,6 +281,18 @@ private struct DeviceCard: View {
                         .foregroundStyle(StrandPalette.textTertiary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                if device.sourceKind == .renphoScale, let latestRenphoReading {
+                    scaleReadingRow(latestRenphoReading)
+                }
+                if device.sourceKind == .renphoScale {
+                    Toggle(isOn: $buzzWhoopOnScaleReading) {
+                        Text("Buzz WHOOP when a reading saves")
+                            .font(StrandFont.caption)
+                            .foregroundStyle(StrandPalette.textSecondary)
+                    }
+                    .toggleStyle(.switch)
+                    .tint(StrandPalette.accent)
+                }
 
                 HStack {
                     Text(lastSeenLine)
@@ -298,6 +320,8 @@ private struct DeviceCard: View {
         Group {
             if device.status == .archived {
                 StatePill("Removed", tone: .neutral, showsDot: false)
+            } else if device.sourceKind == .renphoScale {
+                StatePill("Listening", tone: .neutral)
             } else if isActive {
                 StatePill(isLiveConnected ? "Active · Live" : "Active",
                           tone: .positive, pulsing: isLiveConnected)
@@ -321,7 +345,7 @@ private struct DeviceCard: View {
                     }
                 }
             } else {
-                if !isActive {
+                if !isActive, let onMakeActive {
                     Button { onMakeActive() } label: { Label("Make active", systemImage: "bolt.fill") }
                 }
                 Button { onRename() } label: { Label("Rename", systemImage: "pencil") }
@@ -351,6 +375,21 @@ private struct DeviceCard: View {
         return SourceCoordinator.isWhoop(device) ? "applewatch.side.right" : "heart.circle"
     }
 
+    private var unitSystem: UnitSystem {
+        UnitSystem(rawValue: unitSystemRaw) ?? .metric
+    }
+
+    private func scaleReadingRow(_ reading: RenphoScaleReadingSnapshot) -> some View {
+        let weight = UnitFormatter.massFromKilograms(reading.weightKg, system: unitSystem)
+        let bodyFat = reading.bodyFatPct.map { " · Body fat \(String(format: "%.1f", $0))%" } ?? ""
+        let day = reading.day == Repository.localDayKey(Date()) ? "Today" : reading.day
+        return Label("Last reading \(day): \(weight)\(bodyFat)",
+                     systemImage: "checkmark.circle.fill")
+            .font(StrandFont.caption)
+            .foregroundStyle(StrandPalette.statusPositive)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
     /// The honest, per-model capability + function summary for this device's card.
     private var profile: DeviceCapabilityProfile { .make(for: device) }
 
@@ -371,6 +410,7 @@ private struct DeviceCard: View {
 
     private var lastSeenLine: String {
         if device.status == .archived { return "Removed · data kept" }
+        if device.sourceKind == .renphoScale { return "Background listener on" }
         if isLiveConnected { return "Connected now" }
         return "Last seen \(relativeAgo(TimeInterval(device.lastSeenAt)))"
     }
