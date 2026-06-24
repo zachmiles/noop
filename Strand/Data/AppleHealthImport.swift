@@ -41,6 +41,12 @@ enum AppleHealthImport {
         }
         try await store.upsertDailyMetrics(dm, deviceId: deviceId)
 
+        // Real Apple sleep intervals from export.xml. Daily aggregates are enough for long-range
+        // trends, but sessions need actual stage windows so the Sleep screen can show honest bed/wake
+        // timing for nights that came from Apple Watch.
+        let sleepSessions = sleepSessions(from: result.sleepIntervals)
+        try await store.upsertSleepSessions(sleepSessions, deviceId: deviceId)
+
         // Everything, generically, for the metric explorer.
         let points = AppleHealthAggregator.metricPoints(daily)
             .map { MetricPoint(day: $0.day, key: $0.key, value: $0.value) }
@@ -58,5 +64,83 @@ enum AppleHealthImport {
         try await store.upsertWorkouts(workouts, deviceId: deviceId)
 
         return result.summary
+    }
+
+    private static func sleepSessions(from intervals: [SleepStageInterval]) -> [CachedSleepSession] {
+        let sorted = intervals
+            .filter { $0.stage != .unknown && $0.end > $0.start }
+            .sorted { $0.start < $1.start }
+        guard !sorted.isEmpty else { return [] }
+
+        var groups: [[SleepStageInterval]] = []
+        var current: [SleepStageInterval] = []
+        var currentEnd: Date?
+        let maxGap: TimeInterval = 3 * 60 * 60
+
+        for interval in sorted {
+            if let end = currentEnd, interval.start.timeIntervalSince(end) > maxGap, !current.isEmpty {
+                groups.append(current)
+                current = []
+                currentEnd = nil
+            }
+            current.append(interval)
+            currentEnd = max(currentEnd ?? interval.end, interval.end)
+        }
+        if !current.isEmpty { groups.append(current) }
+
+        return groups.compactMap { group in
+            let stageIntervals = group.filter { $0.stage != .inBed }
+            let displayIntervals = stageIntervals.isEmpty ? group : stageIntervals
+            let asleepSeconds = group.reduce(0.0) { sum, interval in
+                isAsleep(interval.stage) ? sum + interval.end.timeIntervalSince(interval.start) : sum
+            }
+            guard asleepSeconds > 0,
+                  let start = group.map(\.start).min(),
+                  let end = group.map(\.end).max(),
+                  end > start else { return nil }
+
+            let totalSeconds = end.timeIntervalSince(start)
+            let efficiency = totalSeconds > 0 ? asleepSeconds / totalSeconds : nil
+            return CachedSleepSession(
+                startTs: Int(start.timeIntervalSince1970),
+                endTs: Int(end.timeIntervalSince1970),
+                efficiency: efficiency,
+                restingHr: nil,
+                avgHrv: nil,
+                stagesJSON: stagesJSON(from: displayIntervals),
+                userEdited: false,
+                startTsAdjusted: nil)
+        }
+    }
+
+    private static func isAsleep(_ stage: SleepStage) -> Bool {
+        switch stage {
+        case .asleepUnspecified, .asleepCore, .asleepDeep, .asleepREM:
+            return true
+        case .inBed, .awake, .unknown:
+            return false
+        }
+    }
+
+    private static func displayStage(_ stage: SleepStage) -> String {
+        switch stage {
+        case .asleepDeep: return "deep"
+        case .asleepREM: return "rem"
+        case .asleepCore, .asleepUnspecified: return "light"
+        case .awake, .inBed, .unknown: return "wake"
+        }
+    }
+
+    private static func stagesJSON(from intervals: [SleepStageInterval]) -> String? {
+        let segments = intervals.compactMap { interval -> [String: Any]? in
+            let start = Int(interval.start.timeIntervalSince1970)
+            let end = Int(interval.end.timeIntervalSince1970)
+            guard end > start else { return nil }
+            return ["start": start, "end": end, "stage": displayStage(interval.stage)]
+        }
+        guard !segments.isEmpty,
+              let data = try? JSONSerialization.data(withJSONObject: segments, options: []),
+              let json = String(data: data, encoding: .utf8) else { return nil }
+        return json
     }
 }

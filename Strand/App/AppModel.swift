@@ -130,6 +130,7 @@ final class AppModel: ObservableObject {
 
     private var lastDoubleTapAt: Date = .distantPast
     private var lastCoachZone: Int = -1
+    private var appleProjectionTask: Task<Void, Never>?
     // L3 stress-onset detector state: a rolling R-R buffer + the replay-safe detector state (persisted
     // via BiofeedbackPrefs so a relaunch can't re-fire), carried verbatim between evaluations.
     private var rrBuf: [Int] = []
@@ -294,6 +295,7 @@ final class AppModel: ObservableObject {
             }
             #endif
             await self.repo.refresh()                          // surface any imported data at once
+            self.startAppleHealthProjection()
             await self.wireSourceCoordinator()                 // dormant unless a generic strap is active
             try? await Task.sleep(nanoseconds: 6_000_000_000)  // give the first offload a moment
             // FIX 2(a): DEFER the heavy one-shot 4000-day heal/rescore while an import is in flight. A
@@ -1390,6 +1392,7 @@ final class AppModel: ObservableObject {
                 let summary = try await AppleHealthImport.importExport(url: local.url, into: store, deviceId: appleDeviceId)
                 try? await store.checkpointWAL()   // reclaim the WAL a bulk import grew (#590)
                 await repo.refresh()
+                startAppleHealthProjection(reset: true)
                 finishImport(.appleHealth, summary: "Imported \(summary.recordCount) records")
             } catch {
                 finishImport(.appleHealth, summary: "Import failed: \(error)", failed: true)
@@ -1507,12 +1510,30 @@ final class AppModel: ObservableObject {
             switch outcome {
             case .imported(let days, let workouts):
                 await repo.refresh()
+                startAppleHealthProjection(reset: true)
                 let w = workouts > 0 ? " · \(workouts) workouts" : ""
                 finishImport(.appleHealth, summary: "Imported \(days) days\(w)")
             case .nothingToImport:
                 finishImport(.appleHealth, summary: "Nothing new to import.")
             case .rejected(let reason):
                 finishImport(.appleHealth, summary: reason, failed: true)
+            }
+        }
+    }
+
+    private func startAppleHealthProjection(reset: Bool = false) {
+        if reset { repo.resetAppleHealthProjection() }
+        guard appleProjectionTask == nil else { return }
+        appleProjectionTask = Task(priority: .utility) { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.appleProjectionTask = nil }
+            var status = await self.repo.projectAppleHealthHistoryBatch()
+            while !Task.isCancelled && !status.isComplete {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                status = await self.repo.projectAppleHealthHistoryBatch()
+            }
+            if status.total > 0 {
+                await self.repo.refresh()
             }
         }
     }

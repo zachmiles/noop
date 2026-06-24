@@ -87,6 +87,16 @@ struct TodayView: View {
     /// Distinct days + sleep sessions imported from a Mi Band (Mi Fitness), for the Data Sources row.
     @State private var xiaomiDays = 0
     @State private var xiaomiSleeps = 0
+    @State private var sourceComparisons: [SourceComparison] = []
+
+    private struct SourceComparison: Identifiable {
+        let id: String
+        let title: String
+        let whoopValue: String
+        let appleValue: String
+        let variance: String
+        let hasAnyValue: Bool
+    }
 
     // The Rest SCORE (0–100) for the logical day — IntelligenceEngine's Rest composite, written to the
     // `sleep_performance` metric series (imported export wins, computed strap fills). The Key-Metrics
@@ -751,6 +761,7 @@ struct TodayView: View {
                 // so the affordance lives in-content here and presents SupportView as an auto-sized sheet.
                 supportRow
                 #endif
+                sourceComparisonSection
                 sourcesSection
             }
         }
@@ -2227,6 +2238,80 @@ struct TodayView: View {
     // MARK: (d) DATA SOURCES — one full-width footer card.
 
     @ViewBuilder
+    private var sourceComparisonSection: some View {
+        let rows = sourceComparisons.filter(\.hasAnyValue)
+        if !rows.isEmpty {
+            VStack(alignment: .leading, spacing: NoopMetrics.gap) {
+                SectionHeader("Source Comparison", overline: "Whoop primary")
+                NoopCard(tint: StrandPalette.metricCyan) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(spacing: 8) {
+                            SourceBadge("Whoop", tint: StrandPalette.accent)
+                            SourceBadge("Apple Health", tint: StrandPalette.metricCyan)
+                            Spacer()
+                            Text(selectedDayOverline)
+                                .font(StrandFont.caption)
+                                .foregroundStyle(StrandPalette.textTertiary)
+                        }
+                        ForEach(rows) { row in
+                            if row.id != rows.first?.id {
+                                Divider().overlay(StrandPalette.hairline)
+                            }
+                            sourceComparisonRow(row)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func sourceComparisonRow(_ row: SourceComparison) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(row.title)
+                    .font(StrandFont.subhead.weight(.semibold))
+                    .foregroundStyle(StrandPalette.textPrimary)
+                Spacer(minLength: 8)
+                Text(row.variance)
+                    .font(StrandFont.captionNumber)
+                    .foregroundStyle(StrandPalette.textTertiary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+            }
+            HStack(spacing: 8) {
+                comparisonValuePill(label: "Whoop", value: row.whoopValue, tint: StrandPalette.accent)
+                comparisonValuePill(label: "Apple", value: row.appleValue, tint: StrandPalette.metricCyan)
+            }
+        }
+    }
+
+    private func comparisonValuePill(label: String, value: String, tint: Color) -> some View {
+        HStack(spacing: 6) {
+            Text(label).strandOverline()
+            Text(value)
+                .font(StrandFont.captionNumber)
+                .foregroundStyle(value == "—" ? StrandPalette.textTertiary : StrandPalette.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(tint.opacity(0.24), lineWidth: 1))
+    }
+
+    private var appleHealthSourceDetail: String {
+        let workoutsCount = workouts.filter { WorkoutSource.isAppleHealth($0.source) }.count
+        var detail = "\(appleDays.count) days · \(workoutsCount) workouts"
+        let projection = repo.appleProjectionStatus
+        if projection.total > 0 && !projection.isComplete {
+            detail += " · filling \(projection.processed)/\(projection.total)"
+        }
+        return detail
+    }
+
+    @ViewBuilder
     private var sourcesSection: some View {
         VStack(alignment: .leading, spacing: NoopMetrics.gap) {
             SectionHeader("Data Sources", overline: "Provenance")
@@ -2243,7 +2328,7 @@ struct TodayView: View {
                         badge: "Apple Health",
                         tint: StrandPalette.metricCyan,
                         present: !appleDays.isEmpty,
-                        detail: "\(appleDays.count) days · \(workouts.filter { WorkoutSource.isAppleHealth($0.source) }.count) workouts"
+                        detail: appleHealthSourceDetail
                     )
                     if xiaomiDays > 0 {
                         Divider().overlay(StrandPalette.hairline)
@@ -2393,6 +2478,14 @@ struct TodayView: View {
         async let stressSeriesA      = repo.exploreSeries(key: "stress", source: "my-whoop")
         async let fitnessAgeSeriesA  = repo.exploreSeries(key: "fitness_age", source: "my-whoop")
         async let vitalitySeriesA    = repo.exploreSeries(key: "vitality", source: "my-whoop")
+        async let whoopRhrA          = repo.resolvedSeries(key: "rhr", source: Repository.whoopSource)
+        async let whoopHrvA          = repo.resolvedSeries(key: "hrv", source: Repository.whoopSource)
+        async let whoopSleepA        = repo.resolvedSeries(key: "sleep_total_min", source: Repository.whoopSource)
+        async let whoopRestA         = repo.resolvedSeries(key: "sleep_performance", source: Repository.whoopSource)
+        async let appleRhrA          = repo.series(key: "resting_hr", source: Repository.appleHealthSource)
+        async let appleHrvA          = repo.series(key: "hrv", source: Repository.appleHealthSource)
+        async let appleSleepA        = repo.series(key: "asleep_min", source: Repository.appleHealthSource)
+        async let appleRestA         = repo.series(key: "sleep_performance", source: Repository.appleHealthSource)
 
         // Rest SCORE for the logical day. `exploreSeries` already merges imported + computed
         // `sleep_performance` (imported-wins), so a Bluetooth-only user sees the on-device Rest
@@ -2443,6 +2536,15 @@ struct TodayView: View {
         stressToday = (await stressSeriesA).last?.value
         fitnessAgeToday = (await fitnessAgeSeriesA).last?.value
         vitalityToday = (await vitalitySeriesA).last?.value
+        sourceComparisons = buildSourceComparisons(
+            whoopRhr: await whoopRhrA,
+            whoopHrv: await whoopHrvA,
+            whoopSleep: await whoopSleepA,
+            whoopRest: await whoopRestA,
+            appleRhr: await appleRhrA,
+            appleHrv: await appleHrvA,
+            appleSleep: await appleSleepA,
+            appleRest: await appleRestA)
         // Hydration card (opt-in): today's stored total + the sex/Effort goal. Only loaded when the
         // feature is on, so a disabled feature does zero work and the card stays hidden.
         if hydrationEnabled {
@@ -2513,6 +2615,86 @@ struct TodayView: View {
             .max(by: { ($0.endTs - $0.startTs) < ($1.endTs - $1.startTs) })
 
         announceNewDaysIfNeeded()
+    }
+
+    private func buildSourceComparisons(whoopRhr: MetricSeriesResolution,
+                                        whoopHrv: MetricSeriesResolution,
+                                        whoopSleep: MetricSeriesResolution,
+                                        whoopRest: MetricSeriesResolution,
+                                        appleRhr: [(day: String, value: Double)],
+                                        appleHrv: [(day: String, value: Double)],
+                                        appleSleep: [(day: String, value: Double)],
+                                        appleRest: [(day: String, value: Double)]) -> [SourceComparison] {
+        func whoopValue(_ resolution: MetricSeriesResolution) -> Double? {
+            resolution.points.last {
+                $0.day == selectedDayKey && $0.source != Repository.appleHealthSource
+            }?.value
+        }
+        func appleValue(_ points: [(day: String, value: Double)]) -> Double? {
+            points.last { $0.day == selectedDayKey }?.value
+        }
+
+        return [
+            comparison(id: "rhr", title: "Resting HR",
+                       whoop: whoopValue(whoopRhr), apple: appleValue(appleRhr),
+                       format: { "\(Int($0.rounded())) bpm" },
+                       delta: { signedNumber($0, unit: "bpm") }),
+            comparison(id: "hrv", title: "HRV",
+                       whoop: whoopValue(whoopHrv), apple: appleValue(appleHrv),
+                       format: { "\(Int($0.rounded())) ms" },
+                       delta: { signedNumber($0, unit: "ms") }),
+            comparison(id: "sleep", title: "Sleep",
+                       whoop: whoopValue(whoopSleep), apple: appleValue(appleSleep),
+                       format: { sleepMinutesLabel($0) },
+                       delta: { signedMinutes($0) }),
+            comparison(id: "rest", title: "Rest",
+                       whoop: whoopValue(whoopRest), apple: appleValue(appleRest),
+                       format: { "\(Int($0.rounded()))" },
+                       delta: { signedNumber($0, unit: "pts") })
+        ]
+    }
+
+    private func comparison(id: String, title: String, whoop: Double?, apple: Double?,
+                            format: (Double) -> String,
+                            delta: (Double) -> String) -> SourceComparison {
+        let variance: String
+        if let whoop, let apple {
+            variance = "Apple \(delta(apple - whoop))"
+        } else if whoop != nil {
+            variance = "Whoop primary"
+        } else if apple != nil {
+            variance = "Apple fallback"
+        } else {
+            variance = "No reading"
+        }
+        return SourceComparison(
+            id: id,
+            title: title,
+            whoopValue: whoop.map(format) ?? "—",
+            appleValue: apple.map(format) ?? "—",
+            variance: variance,
+            hasAnyValue: whoop != nil || apple != nil)
+    }
+
+    private func signedNumber(_ value: Double, unit: String) -> String {
+        let rounded = Int(value.rounded())
+        if rounded == 0 { return "same" }
+        let sign = rounded > 0 ? "+" : ""
+        return "\(sign)\(rounded) \(unit)"
+    }
+
+    private func signedMinutes(_ value: Double) -> String {
+        let minutes = Int(value.rounded())
+        if minutes == 0 { return "same" }
+        let sign = minutes > 0 ? "+" : "-"
+        return "\(sign)\(sleepMinutesLabel(Double(abs(minutes))))"
+    }
+
+    private func sleepMinutesLabel(_ minutes: Double) -> String {
+        let total = max(0, Int(minutes.rounded()))
+        let h = total / 60
+        let m = total % 60
+        return h > 0 ? "\(h)h \(m)m" : "\(m)m"
     }
 
     /// Post a single honest `.reading` update to the inbox when a refresh brought in genuinely NEWER

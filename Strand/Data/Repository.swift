@@ -90,12 +90,22 @@ struct RepositoryFreshness: Equatable, Sendable {
     var appleDays: Int = 0
     var importedSleeps: Int = 0
     var computedSleeps: Int = 0
+    var appleSleeps: Int = 0
     var earliestDay: String?
     var latestDay: String?
 
     static let empty = RepositoryFreshness()
 
     var hasAnyHistory: Bool { importedDays > 0 || computedDays > 0 || appleDays > 0 }
+}
+
+struct AppleHealthProjectionStatus: Equatable, Sendable {
+    var processed: Int = 0
+    var total: Int = 0
+    var cursorDay: String?
+    var isComplete: Bool = false
+
+    static let idle = AppleHealthProjectionStatus()
 }
 
 /// Read model over the on-device WhoopStore. Opens its own handle (WAL + busy-timeout makes the
@@ -126,6 +136,9 @@ final class Repository: ObservableObject {
     /// data load on this so they reload when fresh strap data lands — `today?.day` alone is a stable
     /// date string within a day and would freeze e.g. the Today HR trend until the date rolls over.
     @Published private(set) var refreshSeq = 0
+    /// Progress for the resumable Apple Health history projector. It fills derived metricSeries rows
+    /// from already-imported Apple daily rows in small interruptible batches.
+    @Published private(set) var appleProjectionStatus: AppleHealthProjectionStatus = .idle
 
     init(deviceId: String) { self.deviceId = deviceId }
 
@@ -300,6 +313,7 @@ final class Repository: ObservableObject {
         let apple = (try? await store.dailyMetrics(deviceId: Self.appleHealthSource, from: fromDay, to: toDay)) ?? []
         let impSleep = (try? await store.sleepSessions(deviceId: deviceId, from: lo, to: hi, limit: 4000)) ?? []
         let compSleep = (try? await store.sleepSessions(deviceId: computedDeviceId, from: lo, to: hi, limit: 4000)) ?? []
+        let appleSleep = (try? await store.sleepSessions(deviceId: Self.appleHealthSource, from: lo, to: hi, limit: 4000)) ?? []
 
         // Export-verbatim sleep figures (long-format metricSeries rows from WhoopImporter).
         // SleepView prefers these per day over its APPROXIMATE recomputations.
@@ -324,11 +338,12 @@ final class Repository: ObservableObject {
             let editedDays = Self.userEditedDays(compSleep)
             return MergedCaches(
                 importedSleep: fig,
-                days: Self.mergeDaily(imported: imported, computed: computed, userEditedDays: editedDays),
-                sleeps: Self.mergeSleep(imported: impSleep, computed: compSleep),
+                days: Self.mergeDaily(imported: imported, computed: computed, apple: apple, userEditedDays: editedDays),
+                sleeps: Self.mergeSleep(imported: impSleep, computed: compSleep, apple: appleSleep),
                 vitalRows: Self.sourceRows(imported: imported, computed: computed, apple: apple),
                 freshness: Self.computeFreshness(imported: imported, computed: computed, apple: apple,
-                                                 importedSleeps: impSleep, computedSleeps: compSleep))
+                                                 importedSleeps: impSleep, computedSleeps: compSleep,
+                                                 appleSleeps: appleSleep))
         }.value
 
         // Generation guard (#review): if a newer refresh() started while this one merged off-actor, drop
@@ -362,7 +377,8 @@ final class Repository: ObservableObject {
     /// `nonisolated` (FIX 3) so `refresh()`'s detached merge task can call it off the main actor.
     nonisolated private static func computeFreshness(imported: [DailyMetric], computed: [DailyMetric],
                                          apple: [DailyMetric], importedSleeps: [CachedSleepSession],
-                                         computedSleeps: [CachedSleepSession]) -> RepositoryFreshness {
+                                         computedSleeps: [CachedSleepSession],
+                                         appleSleeps: [CachedSleepSession]) -> RepositoryFreshness {
         let days = (imported + computed + apple).map(\.day)
         return RepositoryFreshness(
             importedDays: imported.count,
@@ -370,14 +386,16 @@ final class Repository: ObservableObject {
             appleDays: apple.count,
             importedSleeps: importedSleeps.count,
             computedSleeps: computedSleeps.count,
+            appleSleeps: appleSleeps.count,
             earliestDay: days.min(),
             latestDay: days.max()
         )
     }
 
-    /// Imported daily values win field-by-field; computed rows fill only nil imported fields.
-    /// This preserves official export/import values while allowing fresh local analysis to populate
-    /// Charge, skin temperature deviation, activity totals, or other fields missing from that row.
+    /// WHOOP imported daily values win field-by-field; computed rows fill nil imported fields, and
+    /// Apple Health is the bottom fallback for long historical coverage and compatible vitals/sleep.
+    /// This preserves official WHOOP export/import values while allowing fresh local analysis and
+    /// Apple Watch history to populate gaps.
     ///
     /// H5 (#509): a day in `userEditedDays` is one the user hand-edited the sleep of (a corrected
     /// bed/wake time, an added nap, a deleted night). For those days the COMPUTED row's SLEEP fields
@@ -385,14 +403,23 @@ final class Repository: ObservableObject {
     /// the user's correction. Non-sleep fields (recovery/strain/HRV/RHR/activity…) still follow the
     /// normal imports-win merge, and every NON-edited day is unchanged.
     nonisolated static func mergeDaily(imported: [DailyMetric], computed: [DailyMetric],
+                                       apple: [DailyMetric] = [],
                                        userEditedDays: Set<String> = []) -> [DailyMetric] {
         var byDay: [String: DailyMetric] = [:]
-        for d in computed { byDay[d.day] = d }
+        let computedByDay = Dictionary(uniqueKeysWithValues: computed.map { ($0.day, $0) })
+        for d in apple { byDay[d.day] = d }
+        for d in computed {
+            if let existing = byDay[d.day] {
+                byDay[d.day] = d.fillingNilFields(from: existing)
+            } else {
+                byDay[d.day] = d
+            }
+        }
         for d in imported {
             if let existing = byDay[d.day] {
                 let merged = d.fillingNilFields(from: existing)
                 byDay[d.day] = userEditedDays.contains(d.day)
-                    ? merged.takingSleepFields(from: existing)   // edited night: computed sleep wins
+                    ? merged.takingSleepFields(from: computedByDay[d.day] ?? existing)   // edited night: computed sleep wins
                     : merged
             } else {
                 byDay[d.day] = d
@@ -436,12 +463,14 @@ final class Repository: ObservableObject {
     /// in whatever the live device zone is and so disagreed with the engine's cached-offset attribution
     /// across a midnight boundary for non-UTC users (the Swift half of #406; mirrors the Android #304 fix
     /// pinned by MergeSleepLocalDayTest).
-    nonisolated private static func mergeSleep(imported: [CachedSleepSession], computed: [CachedSleepSession]) -> [CachedSleepSession] {
+    nonisolated private static func mergeSleep(imported: [CachedSleepSession], computed: [CachedSleepSession],
+                                               apple: [CachedSleepSession] = []) -> [CachedSleepSession] {
         func endDay(_ s: CachedSleepSession) -> String {
             let offsetSec = TimeZone.current.secondsFromGMT(for: Date(timeIntervalSince1970: TimeInterval(s.endTs)))
             return AnalyticsEngine.dayString(s.endTs, offsetSec: offsetSec)
         }
         var byDay: [String: CachedSleepSession] = [:]
+        for s in apple { byDay[endDay(s)] = s }
         for s in computed { byDay[endDay(s)] = s }
         for s in imported { byDay[endDay(s)] = s }
         return byDay.values.sorted { $0.startTs < $1.startTs }
@@ -497,14 +526,20 @@ final class Repository: ObservableObject {
         let lo = now - days * 86_400, hi = now + 86_400
         let imported = (try? await store.sleepSessions(deviceId: deviceId, from: lo, to: hi, limit: 4000)) ?? []
         let computed = (try? await store.sleepSessions(deviceId: computedDeviceId, from: lo, to: hi, limit: 4000)) ?? []
+        let apple = (try? await store.sleepSessions(deviceId: Self.appleHealthSource, from: lo, to: hi, limit: 4000)) ?? []
         let cal = Calendar.current
         func endDay(_ s: CachedSleepSession) -> Date {
             cal.startOfDay(for: Date(timeIntervalSince1970: TimeInterval(s.endTs)))
         }
         var importedDays = Set<Date>()
         for s in imported { importedDays.insert(endDay(s)) }
+        let computedDays = Set(computed.map(endDay))
         let computedKept = computed.filter { !importedDays.contains(endDay($0)) }
-        return (imported + computedKept).sorted { $0.effectiveStartTs < $1.effectiveStartTs }
+        let appleKept = apple.filter {
+            let day = endDay($0)
+            return !importedDays.contains(day) && !computedDays.contains(day)
+        }
+        return (imported + computedKept + appleKept).sorted { $0.effectiveStartTs < $1.effectiveStartTs }
     }
 
     /// The persisted per-epoch MOTION series for each of `starts` (detected session start keys), keyed by
@@ -753,6 +788,96 @@ final class Repository: ObservableObject {
         let to = Self.dayString(now.addingTimeInterval(86_400))
         let pts = (try? await store.metricSeries(deviceId: source, key: key, from: from, to: to)) ?? []
         return pts.map { ($0.day, $0.value) }
+    }
+
+    @discardableResult
+    func resetAppleHealthProjection() -> AppleHealthProjectionStatus {
+        UserDefaults.standard.removeObject(forKey: Self.appleProjectionCursorDefaultsKey)
+        UserDefaults.standard.removeObject(forKey: Self.appleProjectionCompletedDefaultsKey)
+        appleProjectionStatus = .idle
+        return appleProjectionStatus
+    }
+
+    @discardableResult
+    func projectAppleHealthHistoryBatch(batchSize: Int = 180) async -> AppleHealthProjectionStatus {
+        guard let store = await ensureStore() else { return appleProjectionStatus }
+        let now = Date()
+        let to = Self.dayString(now.addingTimeInterval(86_400))
+        let rows = ((try? await store.dailyMetrics(deviceId: Self.appleHealthSource,
+                                                   from: "1900-01-01", to: to)) ?? [])
+            .sorted { $0.day < $1.day }
+        guard !rows.isEmpty else {
+            let status = AppleHealthProjectionStatus(processed: 0, total: 0, cursorDay: nil, isComplete: true)
+            appleProjectionStatus = status
+            UserDefaults.standard.set(true, forKey: Self.appleProjectionCompletedDefaultsKey)
+            return status
+        }
+
+        let cursor = UserDefaults.standard.string(forKey: Self.appleProjectionCursorDefaultsKey)
+        let pending = rows.filter { row in
+            guard let cursor else { return true }
+            return row.day > cursor
+        }
+        guard !pending.isEmpty else {
+            let status = AppleHealthProjectionStatus(processed: rows.count, total: rows.count,
+                                                     cursorDay: rows.last?.day, isComplete: true)
+            appleProjectionStatus = status
+            UserDefaults.standard.set(true, forKey: Self.appleProjectionCompletedDefaultsKey)
+            return status
+        }
+
+        let batch = Array(pending.prefix(max(1, batchSize)))
+        let points = Self.appleProjectionPoints(from: batch)
+        if !points.isEmpty {
+            try? await store.upsertMetricSeries(points, deviceId: Self.appleHealthSource)
+        }
+        let newCursor = batch.last?.day ?? cursor
+        if let newCursor {
+            UserDefaults.standard.set(newCursor, forKey: Self.appleProjectionCursorDefaultsKey)
+        }
+        let processed = rows.count - pending.count + batch.count
+        let isComplete = processed >= rows.count
+        UserDefaults.standard.set(isComplete, forKey: Self.appleProjectionCompletedDefaultsKey)
+        let status = AppleHealthProjectionStatus(processed: processed, total: rows.count,
+                                                 cursorDay: newCursor, isComplete: isComplete)
+        appleProjectionStatus = status
+        return status
+    }
+
+    private static let appleProjectionCursorDefaultsKey = "appleHealth.projection.cursor.v1"
+    private static let appleProjectionCompletedDefaultsKey = "appleHealth.projection.completed.v1"
+
+    nonisolated private static func appleProjectionPoints(from rows: [DailyMetric]) -> [MetricPoint] {
+        var out: [MetricPoint] = []
+        out.reserveCapacity(rows.count * 7)
+
+        func append(_ day: String, _ key: String, _ value: Double?) {
+            guard let value, value.isFinite else { return }
+            out.append(MetricPoint(day: day, key: key, value: value))
+        }
+
+        for row in rows {
+            append(row.day, "sleep_total_min", row.totalSleepMin)
+            append(row.day, "sleep_deep_min", row.deepMin)
+            append(row.day, "sleep_rem_min", row.remMin)
+            append(row.day, "sleep_light_min", row.lightMin)
+
+            if let deep = row.deepMin, let rem = row.remMin {
+                let restorative = deep + rem
+                append(row.day, "sleep_restorative_min", restorative)
+                if let total = row.totalSleepMin, total > 0 {
+                    append(row.day, "sleep_restorative_pct", restorative / total * 100.0)
+                }
+            }
+
+            // Apple exports often omit a clean efficiency column once folded into daily rows. For the
+            // backfill estimate, use a neutral 90% efficiency so duration and stage balance can still
+            // populate the comparison surface; true interval-based future imports keep their sessions.
+            if let performance = AnalyticsEngine.Rest.composite(daily: row.withEfficiencyFallback(0.90)) {
+                append(row.day, "sleep_performance", performance)
+            }
+        }
+        return out
     }
 
     // MARK: - Deep Timeline (full-day full-resolution viewer — #575/#574/#582)
@@ -1487,6 +1612,28 @@ final class Repository: ObservableObject {
 }
 
 private extension DailyMetric {
+    func withEfficiencyFallback(_ fallback: Double) -> DailyMetric {
+        DailyMetric(
+            day: day,
+            totalSleepMin: totalSleepMin,
+            efficiency: efficiency ?? fallback,
+            deepMin: deepMin,
+            remMin: remMin,
+            lightMin: lightMin,
+            disturbances: disturbances,
+            restingHr: restingHr,
+            avgHrv: avgHrv,
+            recovery: recovery,
+            strain: strain,
+            exerciseCount: exerciseCount,
+            spo2Pct: spo2Pct,
+            skinTempDevC: skinTempDevC,
+            respRateBpm: respRateBpm,
+            steps: steps,
+            activeKcalEst: activeKcalEst
+        )
+    }
+
     /// A copy of self where every nil field is backfilled from `fallback`. Used by the field-by-field
     /// daily merge so an imported export keeps its own values while a computed row fills the gaps it
     /// doesn't carry (e.g. on-device Charge / skin-temp deviation / activity totals).
