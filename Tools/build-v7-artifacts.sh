@@ -34,7 +34,11 @@ else echo "  ✗ macOS build FAILED"; grep -E 'error:' /tmp/v7a-mac.log | sed 's
 # ── iOS unsigned (for AltStore/SideStore) ──────────────────────────────────────
 echo "═══ iOS (unsigned Release) ═══"
 rm -rf build/ios-dd
-xcodebuild -scheme NOOPiOS -configuration Release -sdk iphoneos \
+# Destination-driven (NOT -sdk iphoneos): the iOS app now embeds the watchOS app at
+# NOOP.app/Watch/NOOPWatch.app, and forcing the iOS SDK on the whole scheme would compile the
+# watch targets against iOS (where watch-only widget families like .accessoryCorner do not exist).
+# The destination lets each target build for its own platform; output still lands in Release-iphoneos.
+xcodebuild -scheme NOOPiOS -configuration Release -destination 'generic/platform=iOS' \
   -derivedDataPath build/ios-dd CODE_SIGNING_ALLOWED=NO build >/tmp/v7a-ios.log 2>&1
 IOSAPP="build/ios-dd/Build/Products/Release-iphoneos/NOOP.app"
 if [ -d "$IOSAPP" ]; then

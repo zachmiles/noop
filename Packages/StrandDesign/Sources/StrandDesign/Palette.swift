@@ -31,7 +31,11 @@ public extension Color {
     /// at every one of its call sites when the colour scheme flips — no per-view environment plumbing.
     /// This is the whole light-theme strategy: only the token definitions change, never the call sites.
     init(light: String, dark: String) {
-        #if canImport(UIKit)
+        #if os(watchOS)
+        // watchOS has no UITraitCollection / dynamic-provider UIColor, and our watch app is effectively
+        // always dark, so a token resolves straight to its dark hex. No per-scheme plumbing on the wrist.
+        self.init(hex: dark)
+        #elseif canImport(UIKit)
         self.init(UIColor { trait in
             let c = Color.sRGBComponents(hex: trait.userInterfaceStyle == .dark ? dark : light)
             return UIColor(red: CGFloat(c.r), green: CGFloat(c.g), blue: CGFloat(c.b), alpha: CGFloat(c.a))
@@ -65,7 +69,14 @@ public enum StrandPalette {
     // MARK: Surfaces — native grouped backgrounds
     // These track the platform's grouped List/Form materials so app cards feel like
     // native SwiftUI grouped rows instead of a custom elevated surface.
-    #if canImport(UIKit)
+    #if os(watchOS)
+    public static let surfaceBase    = Color(light: "#F2F2F7", dark: "#1C1C1E")
+    public static let surfaceRaised  = Color(light: "#FFFFFF", dark: "#2C2C2E")
+    public static let surfaceOverlay = Color(light: "#FFFFFF", dark: "#3A3A3C")
+    public static let surfaceInset   = Color(light: "#E9E9EE", dark: "#3A3A3C")
+    public static let hairline       = Color(light: "#D1D1D6", dark: "#38383A")
+    public static let hairlineStrong = Color(light: "#C6C6C8", dark: "#545458")
+    #elseif canImport(UIKit)
     public static let surfaceBase    = Color(uiColor: .systemGroupedBackground)
     public static let surfaceRaised  = Color(uiColor: .secondarySystemGroupedBackground)
     public static let surfaceOverlay = Color(uiColor: .tertiarySystemGroupedBackground)
@@ -426,7 +437,10 @@ enum ColorComponentCache {
     /// A small integer identifying the current resolved appearance (light vs dark), matching the trait
     /// that `UIColor(color)` / `NSColor(color)` resolves against at this call site.
     private static var appearanceToken: Int {
-        #if canImport(UIKit)
+        #if os(watchOS)
+        // No UITraitCollection on watchOS; the watch app is always dark, so the cache key is constant.
+        return 1
+        #elseif canImport(UIKit)
         return UITraitCollection.current.userInterfaceStyle == .dark ? 1 : 0
         #elseif canImport(AppKit)
         let match = NSAppearance.currentDrawing().bestMatch(from: [.aqua, .darkAqua])

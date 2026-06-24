@@ -53,6 +53,9 @@ public enum SourceKind: String, Sendable, CaseIterable {
     /// A RENPHO ES-CS20M / QN-series body scale. Episodic source: wakes, sends one stable body
     /// composition measurement, then disconnects. It is additive and does not replace the active wearable.
     case renphoScale
+    /// Apple Watch streamed via HealthKit (live HealthKit observer + background delivery). Apple-only,
+    /// no Android twin. Additive: only the Apple Watch device registration writes it.
+    case liveAppleWatch
 }
 
 /// Canonical metric a source can provide. Drives capability-aware UI + the day-owner resolver.

@@ -28,6 +28,34 @@ Template:
 - Notes:
 ```
 
+## 2026-06-24 - Merge upstream v7.1/v7.2 into fork
+
+- Status: committed on sync branch `sync/upstream-2026-06-24`.
+- Files:
+  - `project.yml`
+  - `Packages/WhoopStore/Sources/WhoopStore/PairedDevice.swift`
+  - `Strand/BLE/SourceCoordinator.swift`
+  - `StrandiOS/App/StrandiOSApp.swift`
+  - upstream v7.1/v7.2 release, analytics, import, UI, Apple Watch, Android,
+    release-script, and localization updates
+- Reason: bring this fork up to `upstream/main` at `dbc6a9d` while preserving
+  Zach-specific bundle/signing configuration, Apple Foundation Models providers,
+  Apple Health import/projection behavior, RENPHO scale support, and iOS UI
+  polish.
+- Watch during upstream syncs: conflict decisions kept both fork-local
+  `.renphoScale` support and upstream `.liveAppleWatch` support; kept both the
+  RENPHO Apple Health write notification and upstream WatchSession activation;
+  changed upstream's new Watch bundle identifiers to the fork namespace
+  (`com.zachmiles.noop.watch`, `com.zachmiles.noop.watch.complications`) and
+  matched `WKCompanionAppBundleIdentifier` to `com.zachmiles.noop`.
+- Validation: regenerated `Strand.xcodeproj` with `xcodegen generate`; `flowdeck
+  build` passed for the saved `NOOPiOS` configuration on `Zach’s iPhone Air`.
+  `flowdeck test` was attempted but is blocked because scheme `NOOPiOS` is not
+  configured for the test-without-building action.
+- Notes: upstream range merged is `119bd8f..dbc6a9d`; the merge also added a
+  watchOS-safe palette fallback in `StrandDesign` so the new Watch target can
+  compile with the fork's native surface tokens.
+
 ## 2026-06-24 - Current upstream sync snapshot
 
 - Status: documentation snapshot after `git fetch origin --prune` and
