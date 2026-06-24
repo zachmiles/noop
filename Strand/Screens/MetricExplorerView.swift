@@ -59,6 +59,7 @@ private func metricAccent(_ m: MetricDescriptor) -> Color {
     default:
         switch m.source {
         case "apple-health": return StrandPalette.metricCyan
+        case "renpho-scale": return StrandPalette.accent
         case "xiaomi-band":  return StrandPalette.metricAmber
         default:             return StrandPalette.textPrimary
         }

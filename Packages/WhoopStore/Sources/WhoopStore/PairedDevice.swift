@@ -50,9 +50,13 @@ public enum SourceKind: String, Sendable, CaseIterable {
     /// behind the experimental add-device tier. Additive: only the experimental wizard writes it.
     /// (Garmin uses `liveBLE` — its live HR is the standard broadcast-HR path, no proprietary protocol.)
     case huami
+    /// A RENPHO ES-CS20M / QN-series body scale. Episodic source: wakes, sends one stable body
+    /// composition measurement, then disconnects. It is additive and does not replace the active wearable.
+    case renphoScale
 }
 
 /// Canonical metric a source can provide. Drives capability-aware UI + the day-owner resolver.
 public enum Metric: String, Sendable, CaseIterable, Codable {
     case hr, hrv, spo2, skinTemp, steps, sleep, strainLoad
+    case weight, bodyComposition
 }

@@ -362,6 +362,7 @@ final class AppModel: ObservableObject {
             setWhoopActiveDeviceId: { [weak self] id in self?.ble.setActiveDeviceId(id) },
             // The engine's last-connected WHOOP uuid drives first-connect identity adoption.
             connectedPeripheralUUID: ble.$connectedPeripheralUUID.eraseToAnyPublisher(),
+            renphoProfile: { [weak self] in self?.renphoScaleProfile() },
             // Generic-HR connect lifecycle → the SAME strap log BLEManager writes to (`live.append(log:)`),
             // so a "connected but no data" report (issue #421) is no longer blind to the Polar/Wahoo/etc
             // path. Timestamp matches BLEManager.log()'s "HH:mm:ss" so the lines read consistently.
@@ -371,6 +372,19 @@ final class AppModel: ObservableObject {
         coordinator.start()
         self.deviceRegistry = registry
         self.sourceCoordinator = coordinator
+    }
+
+    private func renphoScaleProfile() -> RenphoScaleSource.Profile? {
+        let sex: RenphoScaleSource.Sex
+        switch profile.sex.lowercased() {
+        case "male":   sex = .male
+        case "female": sex = .female
+        default:       return nil
+        }
+        guard profile.age > 0, profile.heightCm > 0 else { return nil }
+        return RenphoScaleSource.Profile(sex: sex,
+                                         age: profile.age,
+                                         heightM: profile.heightCm / 100.0)
     }
 
     private func refreshAfterCompletedBackfill() async {

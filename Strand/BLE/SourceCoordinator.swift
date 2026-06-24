@@ -70,6 +70,9 @@ final class SourceCoordinator: ObservableObject {
     private var huamiSource: HuamiHRSource?
     /// The deviceId the active non-WHOOP source (`standardSource` / `ftmsSource` / `huamiSource`) runs for.
     private var activeStrapId: String?
+    /// Episodic RENPHO scale listener. Runs additively beside WHOOP/strap sources because a scale is not
+    /// the user's active wearable; it wakes, contributes one body reading, then sleeps.
+    private var renphoSource: RenphoScaleSource?
     /// True once we've transitioned onto a generic strap. While false (the default / WHOOP-active
     /// state), switching to WHOOP is a pure no-op — we never issue a redundant WHOOP (re)scan.
     private var onStrap = false
@@ -79,6 +82,8 @@ final class SourceCoordinator: ObservableObject {
     private var activeWhoopId: String?
 
     private var cancellables = Set<AnyCancellable>()
+    /// Provides the current body profile for the scale's BIA handshake. nil means weight-only.
+    private let renphoProfile: () -> RenphoScaleSource.Profile?
 
     // MARK: - Init
 
@@ -101,6 +106,7 @@ final class SourceCoordinator: ObservableObject {
          setWhoopPreferredPeripheral: @escaping (String?) -> Void,
          setWhoopActiveDeviceId: @escaping (String) -> Void,
          connectedPeripheralUUID: AnyPublisher<String?, Never>,
+         renphoProfile: @escaping () -> RenphoScaleSource.Profile? = { nil },
          straplog: @escaping (String) -> Void = { _ in }) {
         self.registry = registry
         self.live = live
@@ -110,6 +116,7 @@ final class SourceCoordinator: ObservableObject {
         self.setWhoopPreferredPeripheral = setWhoopPreferredPeripheral
         self.setWhoopActiveDeviceId = setWhoopActiveDeviceId
         self.connectedPeripheralUUID = connectedPeripheralUUID
+        self.renphoProfile = renphoProfile
         self.straplog = straplog
     }
 
@@ -126,10 +133,16 @@ final class SourceCoordinator: ObservableObject {
             .sink { [weak self] id in self?.activeDeviceChanged(to: id) }
             .store(in: &cancellables)
 
+        registry.$devices
+            .sink { [weak self] _ in self?.reconcileRenphoScaleListener() }
+            .store(in: &cancellables)
+
         connectedPeripheralUUID
             .removeDuplicates()
             .sink { [weak self] uuid in self?.connectedPeripheralChanged(to: uuid) }
             .store(in: &cancellables)
+
+        reconcileRenphoScaleListener()
     }
 
     // MARK: - Transitions
@@ -281,6 +294,44 @@ final class SourceCoordinator: ObservableObject {
         standardSource?.stop(); standardSource = nil
         ftmsSource?.stop(); ftmsSource = nil
         huamiSource?.stop(); huamiSource = nil
+    }
+
+    /// Keep the body-scale listener in sync with paired scale rows. Unlike HR/FTMS/Huami, the scale does
+    /// not become the active wearable and does not drive LiveState; it simply listens for known RENPHO
+    /// peripherals and writes final readings under the shared RENPHO source id.
+    private func reconcileRenphoScaleListener() {
+        let scales = registry.devices.filter { $0.status != .archived && $0.sourceKind == .renphoScale }
+        guard !scales.isEmpty else {
+            renphoSource?.stop()
+            renphoSource = nil
+            return
+        }
+        if renphoSource == nil {
+            let storeHandle = self.storeHandle
+            let straplog = self.straplog
+            let source = RenphoScaleSource(
+                profileProvider: renphoProfile,
+                deviceIdForPeripheral: { [weak self] uuid in
+                    self?.registry.devices.first {
+                        $0.sourceKind == .renphoScale
+                            && $0.status != .archived
+                            && $0.peripheralId == uuid.uuidString
+                    }?.id
+                },
+                persist: { [storeHandle, straplog] _, reading in
+                    Task {
+                        guard let store = await storeHandle() else { return }
+                        let rows = reading.metrics.map { MetricPoint(day: reading.day, key: $0.key, value: $0.value) }
+                        _ = try? await store.upsertMetricSeries(rows, deviceId: Repository.renphoScaleSource)
+                        straplog("RENPHO scale: saved \(rows.count) body metrics for \(reading.day)")
+                    }
+                },
+                log: straplog)
+            renphoSource = source
+            source.scan()
+        } else if renphoSource?.scanning == false {
+            renphoSource?.scan()
+        }
     }
 
     // MARK: - Identity adoption

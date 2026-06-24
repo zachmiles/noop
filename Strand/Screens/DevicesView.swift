@@ -346,6 +346,7 @@ private struct DeviceCard: View {
     /// generic straps read as a heart-rate strap.
     private var icon: String {
         if device.sourceKind == .ftms { return "figure.run.treadmill" }
+        if device.sourceKind == .renphoScale { return "scalemass" }
         if device.sourceKind == .huami { return "waveform.path.ecg.rectangle" }
         return SourceCoordinator.isWhoop(device) ? "applewatch.side.right" : "heart.circle"
     }
@@ -413,6 +414,13 @@ struct DeviceCapabilityProfile {
                 captures: "Speed · Cadence · Power · Distance · Energy · Heart rate (if the machine sends it)",
                 powers: "Records a live machine workout — Effort-scored from HR when the machine reports it",
                 footnote: "Live machine data over Bluetooth FTMS. No sleep, recovery, skin temp or SpO₂. Effort needs the machine's heart rate; without it the session logs the machine metrics only.")
+        }
+        if d.sourceKind == .renphoScale {
+            return DeviceCapabilityProfile(
+                displayModel: "RENPHO smart scale",
+                captures: "Weight · Body fat · BMI · Lean mass · Body composition",
+                powers: "Powers Health metrics, Explore, Compare and body-weight-aware calculations",
+                footnote: "Local Bluetooth body-scale readings. Body composition depends on the profile inputs the scale requires; NOOP records weight-only when those inputs are unavailable.")
         }
         // EXPERIMENTAL Huami device (Amazfit / Zepp / Mi Band): best-effort live HR only, honest about it.
         if d.sourceKind == .huami {

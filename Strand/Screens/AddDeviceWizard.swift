@@ -38,6 +38,7 @@ struct AddDeviceWizard: View {
         case miBand        // Xiaomi Mi Band (Huami; no-auth live HR path, honest message if auth needed)
         case garmin        // Garmin watch (standard Broadcast HR path + an enable hint)
         case oura          // Oura ring (no open live stream → honest dead-end, points at file import)
+        case renphoScale   // RENPHO ES-CS20M / QN-series body scale
         var id: Self { self }
 
         var isWhoop: Bool { self == .whoop4 || self == .whoop5mg }
@@ -70,6 +71,8 @@ struct AddDeviceWizard: View {
     @State private var pickedStrap: StandardHRSource.DiscoveredStrap?
     /// An FTMS gym machine picked from the FTMSSource scan.
     @State private var pickedMachine: FTMSSource.DiscoveredMachine?
+    /// A RENPHO body scale picked from the RenphoScaleSource scan.
+    @State private var pickedScale: RenphoScaleSource.DiscoveredScale?
     /// An EXPERIMENTAL Huami device (Amazfit / Zepp / Mi Band) picked from the HuamiHRSource scan.
     @State private var pickedHuami: HuamiHRSource.DiscoveredDevice?
 
@@ -83,6 +86,9 @@ struct AddDeviceWizard: View {
     /// Discovery-only FTMS source for the gym-equipment path. `feedsLive: false` so it never writes
     /// LiveState; we only read its `discovered` / `scanning` while scanning. Built once.
     @StateObject private var ftmsScanner: FTMSSource
+    /// Discovery-only RENPHO scale scanner. The persistent listener is owned by SourceCoordinator after
+    /// registration, so this object only lists nearby scales for the wizard.
+    @StateObject private var renphoScanner: RenphoScaleSource
     /// Discovery-only EXPERIMENTAL Huami scanner (Amazfit / Zepp / Mi Band). `feedsLive: false`, never
     /// persists; the wizard only reads its `discovered` / `scanning`. Built once.
     @StateObject private var huamiScanner: HuamiHRSource
@@ -106,6 +112,7 @@ struct AddDeviceWizard: View {
         _hrScanner = StateObject(wrappedValue: StandardHRSource(
             live: live, deviceId: "scan-preview", persist: { _ in }, log: wizardLog))
         _ftmsScanner = StateObject(wrappedValue: FTMSSource(live: live, log: wizardLog, feedsLive: false))
+        _renphoScanner = StateObject(wrappedValue: RenphoScaleSource(log: wizardLog, discoveryOnly: true))
         _huamiScanner = StateObject(wrappedValue: HuamiHRSource(
             live: live, deviceId: "scan-preview", log: wizardLog, feedsLive: false))
         _ouraScanner = StateObject(wrappedValue: OuraProbeSource(log: wizardLog))
@@ -210,6 +217,9 @@ struct AddDeviceWizard: View {
             typeRow(.gymEquipment, icon: "figure.run.treadmill",
                     title: "Gym equipment",
                     subtitle: "Treadmill, indoor bike, rower or cross-trainer (Bluetooth FTMS)")
+            typeRow(.renphoScale, icon: "scalemass",
+                    title: "RENPHO smart scale",
+                    subtitle: "ES-CS20M / QN-series body scale. Weight + body composition.")
 
             // EXPERIMENTAL tier — clearly labelled, opt-in, best-effort. Each is honest about what it can
             // actually read; none fabricates data.
@@ -345,6 +355,12 @@ struct AddDeviceWizard: View {
                 "Make sure it isn't already connected to another app (Zwift, the gym's app, a bike computer…).",
                 "NOOP looks for machines that broadcast the standard Bluetooth Fitness Machine service.",
             ]
+        case .renphoScale:
+            return [
+                "Close the RENPHO app so it doesn't grab the scale session first.",
+                "Step on the scale with bare, dry feet and stand still until the display finishes.",
+                "NOOP will listen locally over Bluetooth and save the final body reading on-device.",
+            ]
         case .amazfit:
             return [
                 "Wake your Amazfit / Zepp band and make sure it isn't connected to the Zepp app right now.",
@@ -374,6 +390,7 @@ struct AddDeviceWizard: View {
         case .whoop4, .whoop5mg: return "applewatch.side.right"
         case .hrStrap:           return "heart.circle"
         case .gymEquipment:      return "figure.run.treadmill"
+        case .renphoScale:       return "scalemass"
         case .amazfit:           return "waveform.path.ecg.rectangle"
         case .miBand:            return "waveform.path.ecg"
         case .garmin:            return "applewatch"
@@ -408,6 +425,16 @@ struct AddDeviceWizard: View {
                     step = .confirm
                 } onRescan: {
                     ftmsScanner.scan()
+                }
+            } else if type == .renphoScale {
+                RenphoScalePickList(scanner: renphoScanner) { scale in
+                    pickedScale = scale
+                    clearOtherPicks(except: .renphoScale)
+                    nameDraft = scale.name
+                    renphoScanner.stopScan()
+                    step = .confirm
+                } onRescan: {
+                    renphoScanner.scan()
                 }
             } else if type == .amazfit || type == .miBand {
                 // EXPERIMENTAL Huami pick list (Amazfit / Zepp / Mi Band).
@@ -448,9 +475,11 @@ struct AddDeviceWizard: View {
         switch keep {
         case .hrStrap, .garmin:    pickedHuami = nil; pickedMachine = nil
         case .gymEquipment:        pickedStrap = nil; pickedHuami = nil
+        case .renphoScale:         pickedStrap = nil; pickedHuami = nil; pickedMachine = nil
         case .amazfit, .miBand:    pickedStrap = nil; pickedMachine = nil
         default:                   pickedStrap = nil; pickedMachine = nil; pickedHuami = nil
         }
+        if keep != .renphoScale { pickedScale = nil }
     }
 
     // MARK: Step 4 — name + confirm
@@ -481,7 +510,13 @@ struct AddDeviceWizard: View {
                             in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .accessibilityLabel("Device name")
 
-            Button("Add") { askMakeActive = true }
+            Button("Add") {
+                if type == .renphoScale {
+                    finishAdd(makeActive: false)
+                } else {
+                    askMakeActive = true
+                }
+            }
                 .buttonStyle(.borderedProminent)
                 .tint(StrandPalette.accent)
                 .frame(maxWidth: .infinity)
@@ -500,12 +535,14 @@ struct AddDeviceWizard: View {
         if let pickedWhoop { return pickedWhoop.name.isEmpty ? (type.map(typeTitle) ?? "Device") : pickedWhoop.name }
         if let pickedStrap { return pickedStrap.name }
         if let pickedMachine { return pickedMachine.name }
+        if let pickedScale { return pickedScale.name }
         if let pickedHuami { return pickedHuami.name }
         return type.map(typeTitle) ?? "Device"
     }
     private var confirmBrand: String {
         if type?.isWhoop == true { return "WHOOP" }
         if type == .gymEquipment { return "Gym equipment" }
+        if type == .renphoScale { return "RENPHO" }
         if type == .amazfit { return "Amazfit" }
         if type == .miBand { return "Mi Band" }
         if type == .garmin { return "Garmin" }
@@ -513,7 +550,7 @@ struct AddDeviceWizard: View {
         return "Heart-rate strap"
     }
     private var confirmRSSI: Int {
-        pickedWhoop?.rssi ?? pickedStrap?.rssi ?? pickedMachine?.rssi ?? pickedHuami?.rssi ?? -70
+        pickedWhoop?.rssi ?? pickedStrap?.rssi ?? pickedMachine?.rssi ?? pickedScale?.rssi ?? pickedHuami?.rssi ?? -70
     }
 
     // MARK: Actions
@@ -526,7 +563,7 @@ struct AddDeviceWizard: View {
         case .confirm:
             // Re-enter the pick step and restart its scan so the user can choose a different device.
             if let type { startScan(for: type) }
-            pickedWhoop = nil; pickedStrap = nil; pickedMachine = nil; pickedHuami = nil
+            pickedWhoop = nil; pickedStrap = nil; pickedMachine = nil; pickedScale = nil; pickedHuami = nil
             step = .pick
         }
     }
@@ -535,6 +572,7 @@ struct AddDeviceWizard: View {
         switch type {
         case .whoop4, .whoop5mg: model.presentWhoopScan(model: type.whoopModel ?? .whoop4)
         case .gymEquipment:      ftmsScanner.scan()
+        case .renphoScale:       renphoScanner.scan()
         case .amazfit, .miBand:  huamiScanner.scan()
         case .oura:              ouraScanner.scan()
         // Heart-rate strap AND Garmin both use the standard 0x180D scanner (Garmin Broadcast HR).
@@ -546,6 +584,7 @@ struct AddDeviceWizard: View {
         model.stopWhoopScan()
         hrScanner.stopScan()
         ftmsScanner.stopScan()
+        renphoScanner.stopScan()
         huamiScanner.stopScan()
         ouraScanner.stop()
     }
@@ -611,6 +650,19 @@ struct AddDeviceWizard: View {
                 capabilities: [.hr],
                 status: .paired,
                 addedAt: now, lastSeenAt: now)
+        } else if let pickedScale {
+            // RENPHO body scale: additive, episodic body metrics. It is deliberately NOT made active
+            // because the active-device slot belongs to the continuous wearable stream.
+            device = PairedDevice(
+                id: "renpho-\(pickedScale.id.uuidString)",
+                brand: "RENPHO",
+                model: pickedScale.name,
+                nickname: name == pickedScale.name ? nil : name,
+                peripheralId: pickedScale.id.uuidString,
+                sourceKind: .renphoScale,
+                capabilities: [.weight, .bodyComposition],
+                status: .paired,
+                addedAt: now, lastSeenAt: now)
         } else {
             onClose(); return
         }
@@ -627,6 +679,7 @@ struct AddDeviceWizard: View {
         case .whoop4:       return "WHOOP 4.0"
         case .hrStrap:      return "Heart-rate strap"
         case .gymEquipment: return "Gym equipment"
+        case .renphoScale:  return "RENPHO smart scale"
         case .amazfit:      return "Amazfit / Zepp"
         case .miBand:       return "Xiaomi Mi Band"
         case .garmin:       return "Garmin watch"
@@ -778,6 +831,31 @@ private struct FTMSPickList: View {
                                   subtitle: "Gym equipment",
                                   rssi: machine.rssi) {
                         onSelect(machine)
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - RENPHO scale pick list
+
+private struct RenphoScalePickList: View {
+    @ObservedObject var scanner: RenphoScaleSource
+    let onSelect: (RenphoScaleSource.DiscoveredScale) -> Void
+    let onRescan: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: NoopMetrics.gap) {
+            ScanStatusBar(searching: scanner.scanning, onRescan: onRescan)
+            if scanner.discovered.isEmpty {
+                SearchingCard()
+            } else {
+                ForEach(scanner.discovered.sorted { $0.rssi > $1.rssi }) { scale in
+                    DiscoveredRow(name: scale.name,
+                                  subtitle: "RENPHO smart scale",
+                                  rssi: scale.rssi) {
+                        onSelect(scale)
                     }
                 }
             }

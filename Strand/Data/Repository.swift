@@ -198,6 +198,7 @@ final class Repository: ObservableObject {
     static let whoopSource = "my-whoop"
     static let appleHealthSource = "apple-health"
     static let healthConnectSource = "health-connect"
+    static let renphoScaleSource = "renpho-scale"
 
     /// `yyyy-MM-dd` in the device's local zone, matching how `DailyMetric.day` is stored.
     private static let dayKeyFormatter: DateFormatter = {
@@ -1106,7 +1107,11 @@ final class Repository: ObservableObject {
             return uniqued(candidates)
         }
         if preferredSource == appleHealthSource {
-            var candidates = [MetricSourceCandidate(source: appleHealthSource, key: key)]
+            var candidates: [MetricSourceCandidate] = []
+            if renphoScaleCanFillBodyMetric(key) {
+                candidates.append(MetricSourceCandidate(source: renphoScaleSource, key: key))
+            }
+            candidates.append(MetricSourceCandidate(source: appleHealthSource, key: key))
             // Health Connect is an Apple-equivalent body-metric source (Android only — harmless no-op on
             // iOS/Mac, which never write a "health-connect" series). Kept here so the resolver is
             // byte-identical to Android's, where it makes a Health-Connect-only weight history resolve in
@@ -1118,6 +1123,15 @@ final class Repository: ObservableObject {
             return uniqued(candidates)
         }
         return [MetricSourceCandidate(source: preferredSource, key: key)]
+    }
+
+    /// Body-scale readings are first-class body metrics. When a surface asks for Apple-compatible body
+    /// metrics, prefer direct RENPHO measurements first, then fall back to Apple Health/Health Connect.
+    private static func renphoScaleCanFillBodyMetric(_ key: String) -> Bool {
+        switch key {
+        case "weight", "body_fat", "lean_mass", "bmi": return true
+        default:                                       return false
+        }
     }
 
     /// The Apple-Health series key that carries the SAME physiological quantity as a WHOOP key — used

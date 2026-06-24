@@ -2442,7 +2442,7 @@ struct TodayView: View {
         async let spo2Spark          = sparkValues("spo2", source: "my-whoop", window: 14)
         async let respRateSpark      = sparkValues("resp_rate", source: "apple-health", window: 14)
         async let stepsAppleSpark    = sparkValues("steps", source: "apple-health", window: 14)
-        async let weightSpark        = sparkValues("weight", source: "apple-health", window: 90)
+        async let weightSpark        = resolvedSparkValues("weight", source: Repository.appleHealthSource, window: 90)
         async let activeKcalSpark    = sparkValues("active_kcal", source: "apple-health", window: 14)
 
         sparks["recovery"]        = await recoverySpark
@@ -2739,6 +2739,12 @@ struct TodayView: View {
         return trailingWindow(all, days: window).map { $0.value }
     }
 
+    private func resolvedSparkValues(_ key: String, source: String, window: Int) async -> [Double] {
+        let all = await repo.resolvedSeries(key: key, source: source).values
+        guard !all.isEmpty else { return [] }
+        return trailingWindow(all, days: window).map { $0.value }
+    }
+
     /// Keep only points within the trailing `days` CALENDAR days ending TODAY (the phone's local date).
     /// Was anchored to the most-recent point, which on a stale import pinned the window to months-old
     /// data shown as a current trend (issue #23). ISO yyyy-MM-dd compares chronologically.
@@ -2761,7 +2767,7 @@ struct TodayView: View {
     /// self-reported profile weight instead of "—" (#204). Always formatted through the shared
     /// `UnitFormatter` so the Imperial/Metric toggle reaches this tile. Mirrors Android's `weightTile`.
     private func weightTile(_ appleWeightKg: Double?) -> (value: String, caption: String) {
-        if let kg = appleWeightKg ?? sparks["weight"]?.last {
+        if let kg = sparks["weight"]?.last ?? appleWeightKg {
             return (UnitFormatter.massFromKilograms(kg, system: unitSystem), "latest")
         }
         return (UnitFormatter.massFromKilograms(profile.weightKg, system: unitSystem), "from profile")

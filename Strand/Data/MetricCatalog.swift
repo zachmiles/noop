@@ -20,6 +20,7 @@ struct MetricDescriptor: Identifiable, Hashable {
     var sourceLabel: String {
         switch source {
         case "apple-health": return "Apple Health"
+        case "renpho-scale": return "RENPHO Scale"
         case "xiaomi-band":  return "Mi Band"
         case "nutrition-csv": return "Nutrition"
         case "noop-mood":    return "Mood"
@@ -158,6 +159,16 @@ enum MetricCatalog {
         d("body_fat", "Body Fat", "Health", "%", "apple-health", "percent", 1, false),
         d("lean_mass", "Lean Body Mass", "Health", "kg", "apple-health", "figure.arms.open", 1, true),
         d("bmi", "BMI", "Health", "", "apple-health", "figure", 1, nil),
+        d("weight", "Weight", "Health", "kg", "renpho-scale", "scalemass.fill", 1, nil),
+        d("body_fat", "Body Fat", "Health", "%", "renpho-scale", "percent", 1, false),
+        d("lean_mass", "Lean Body Mass", "Health", "kg", "renpho-scale", "figure.arms.open", 1, true),
+        d("bmi", "BMI", "Health", "", "renpho-scale", "figure", 1, nil),
+        d("body_water", "Body Water", "Health", "%", "renpho-scale", "drop.fill", 1, true),
+        d("skeletal_muscle", "Skeletal Muscle", "Health", "%", "renpho-scale", "figure.strengthtraining.traditional", 1, true),
+        d("muscle_mass", "Muscle Mass", "Health", "kg", "renpho-scale", "dumbbell", 1, true),
+        d("bone_mass", "Bone Mass", "Health", "kg", "renpho-scale", "figure.stand", 1, nil),
+        d("protein", "Protein", "Health", "%", "renpho-scale", "p.circle", 1, true),
+        d("bmr", "Basal Metabolic Rate", "Health", "kcal", "renpho-scale", "flame", 0, nil),
         d("stress", "Day Stress", "Health", "/3", "my-whoop", "gauge.with.dots.needle.50percent", 1, false),
 
         // ── Nutrition (imported from a food-tracker CSV: calories-in alongside calories-out)
