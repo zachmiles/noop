@@ -62,14 +62,31 @@ public extension Color {
 
 public enum StrandPalette {
 
-    // MARK: Surfaces — deep navy canvas, tinted frosted cards
-    // Background is a near-black navy (NOT pure black); cards float just above it.
-    public static let surfaceBase    = Color(light: "#F2F2F7", dark: "#121518") // WHOOP dark blue-grey canvas (sampled)
-    public static let surfaceRaised  = Color(light: "#FFFFFF", dark: "#25292C") // WHOOP grey list-card fill (sampled)
-    public static let surfaceOverlay = Color(light: "#FFFFFF", dark: "#1C1F26") // popovers / sheets / tooltips
-    public static let surfaceInset   = Color(light: "#E9E9EE", dark: "#1F2229") // wells / chart insets / segmented track
-    public static let hairline       = Color(light: "#D8D0BD", dark: "#21304A") // soft 1px border (stronger on light for card edges)
-    public static let hairlineStrong = Color(light: "#C7BCA4", dark: "#2E3C57") // hover / emphasis border
+    // MARK: Surfaces — native grouped backgrounds
+    // These track the platform's grouped List/Form materials so app cards feel like
+    // native SwiftUI grouped rows instead of a custom elevated surface.
+    #if canImport(UIKit)
+    public static let surfaceBase    = Color(uiColor: .systemGroupedBackground)
+    public static let surfaceRaised  = Color(uiColor: .secondarySystemGroupedBackground)
+    public static let surfaceOverlay = Color(uiColor: .tertiarySystemGroupedBackground)
+    public static let surfaceInset   = Color(uiColor: .tertiarySystemGroupedBackground)
+    public static let hairline       = Color(uiColor: .separator)
+    public static let hairlineStrong = Color(uiColor: .opaqueSeparator)
+    #elseif canImport(AppKit)
+    public static let surfaceBase    = Color(nsColor: .windowBackgroundColor)
+    public static let surfaceRaised  = Color(nsColor: .controlBackgroundColor)
+    public static let surfaceOverlay = Color(nsColor: .underPageBackgroundColor)
+    public static let surfaceInset   = Color(nsColor: .separatorColor).opacity(0.18)
+    public static let hairline       = Color(nsColor: .separatorColor).opacity(0.55)
+    public static let hairlineStrong = Color(nsColor: .separatorColor)
+    #else
+    public static let surfaceBase    = Color(light: "#F2F2F7", dark: "#1C1C1E")
+    public static let surfaceRaised  = Color(light: "#FFFFFF", dark: "#2C2C2E")
+    public static let surfaceOverlay = Color(light: "#FFFFFF", dark: "#3A3A3C")
+    public static let surfaceInset   = Color(light: "#E9E9EE", dark: "#3A3A3C")
+    public static let hairline       = Color(light: "#D1D1D6", dark: "#38383A")
+    public static let hairlineStrong = Color(light: "#C6C6C8", dark: "#545458")
+    #endif
 
     // MARK: Text — deep navy-ink on paper / cool off-white on navy
     public static let textPrimary    = Color(light: "#1A2230", dark: "#F4F6F8")
@@ -213,7 +230,7 @@ public enum StrandPalette {
     // MARK: - Titanium & Gold domain "colour worlds" (NEW)
     //
     // Each daily score owns a two-stop accent gradient (deep → bright) plus a glow.
-    // These drive the layered gauges, frosted-card tints and scenic heroes. Charge
+    // These drive the layered gauges, charts and scenic heroes. Charge
     // owns the brand gold; Effort the amber ramp; Rest the blue scale.
 
     // Each domain's accent / glow follows the chart style: Titanium (gold/amber/blue) or Classic

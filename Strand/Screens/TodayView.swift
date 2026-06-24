@@ -736,21 +736,13 @@ struct TodayView: View {
                 heroSection
                     .padding(.vertical, NoopMetrics.space4)
                     .frame(maxWidth: .infinity)
-                    // The dark hero CARD floats over the vivid day-scene so the rings + white numbers stay
-                    // crisp — the card does the contrast work, not a muted scene (Aaron 2026-06-23).
-                    .background(
-                        RoundedRectangle(cornerRadius: NoopMetrics.cardRadius, style: .continuous)
-                            .fill(StrandPalette.surfaceBase.opacity(0.72))
-                    )
+                    .background(FrostedCardSurface(cornerRadius: NoopMetrics.cardRadius))
                     .staggeredAppear(index: 0)
                 #else
                 heroSection
                     .padding(.vertical, NoopMetrics.space4)
                     .frame(maxWidth: .infinity)
-                    .background(
-                        RoundedRectangle(cornerRadius: NoopMetrics.cardRadius, style: .continuous)
-                            .fill(StrandPalette.surfaceBase.opacity(0.72))
-                    )
+                    .background(FrostedCardSurface(cornerRadius: NoopMetrics.cardRadius))
                     .staggeredAppear(index: 0)
                 #endif
                 heartRateTrendSection.staggeredAppear(index: 1)
@@ -1496,7 +1488,7 @@ struct TodayView: View {
         // prior scored day (only when we're carrying — `lastScoredRecoveryDay` is gated to that case).
         let carried = lastScoredRecoveryDay
         let vd = carried ?? d
-        NoopCard(tint: StrandPalette.chargeColor) {
+        NoopCard(padding: 0, tint: StrandPalette.chargeColor) {
             VStack(spacing: 0) {
                 // DEBUG promo harness: pin HRV / Resting HR to the active frame's values. No-op otherwise.
                 #if DEBUG
@@ -1509,11 +1501,15 @@ struct TodayView: View {
                 metricRow(icon: "waveform.path.ecg", label: "HRV",
                           value: demoHrv ?? (vd?.avgHrv.map { "\(Int($0.rounded()))" } ?? "—"), unit: "ms",
                           tint: StrandPalette.metricCyan)
-                Divider().overlay(StrandPalette.hairline)
+                Divider()
+                    .overlay(StrandPalette.hairline)
+                    .padding(.leading, NoopMetrics.cardPadding)
                 metricRow(icon: "heart.fill", label: "Resting HR",
                           value: demoRhr ?? (vd?.restingHr.map { "\($0)" } ?? "—"), unit: "bpm",
                           tint: StrandPalette.metricRose)
-                Divider().overlay(StrandPalette.hairline)
+                Divider()
+                    .overlay(StrandPalette.hairline)
+                    .padding(.leading, NoopMetrics.cardPadding)
                 metricRow(icon: "lungs.fill", label: "Respiratory",
                           // Carried day uses its OWN respiratory; a non-carrying today keeps the
                           // sparkline-tail fallback the tile uses so a sparse-but-recent value still reads.
@@ -1536,6 +1532,8 @@ struct TodayView: View {
                         Spacer(minLength: 0)
                     }
                     .padding(.top, 10)
+                    .padding(.horizontal, NoopMetrics.cardPadding)
+                    .padding(.bottom, 12)
                     .accessibilityElement(children: .combine)
                     .accessibilityLabel("These vitals are from \(carriedCaption(prior))")
                 }
@@ -1569,7 +1567,8 @@ struct TodayView: View {
                     .foregroundStyle(StrandPalette.textTertiary)
             }
         }
-        .padding(.vertical, 13)
+        .padding(.horizontal, NoopMetrics.cardPadding)
+        .padding(.vertical, 10)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(label): \(value) \(unit)")
     }

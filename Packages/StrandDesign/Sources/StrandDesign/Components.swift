@@ -6,15 +6,14 @@ import SwiftUI
 // the uniform, instrument-grade look from the reference. Do not invent ad-hoc cards.
 
 public enum NoopMetrics {
-    public static let cardRadius: CGFloat = 20   // Apple x WHOOP: rounded cards
-    public static let cardPadding: CGFloat = 16  // Apple x WHOOP: roomier card interior
-    public static let gap: CGFloat = 12          // gap between cards
-    public static let sectionGap: CGFloat = 22   // Apple x WHOOP: breathing room (not cramped)
-    public static let screenPadding: CGFloat = 18
-    public static let tileHeight: CGFloat = 96   // Design Reset: tighter metric tile
+    public static let cardRadius: CGFloat = 16   // grouped-list card radius
+    public static let cardPadding: CGFloat = 16
+    public static let gap: CGFloat = 12          // gap between cards and grid items
+    public static let sectionGap: CGFloat = 20
+    public static let screenPadding: CGFloat = 20
+    public static let tileHeight: CGFloat = 104
     public static let chartHeight: CGFloat = 220
     public static let hypnogramBandMinThickness: CGFloat = 14  // floor so short stages read as bars, not ticks
-    public static let tabBarClearance: CGFloat = 76  // iOS: extra bottom scroll room so the last card clears the floating tab bar
 
     // MARK: Standardised spacing scale (the ONE source of truth for margins)
     //
@@ -34,7 +33,7 @@ public enum NoopMetrics {
     /// Horizontal page margin (the gutter on the left/right edge of a screen). Use via `.screenPadding()`.
     public static let screenHPadding: CGFloat = 20
     /// Vertical gap between top-level page sections.
-    public static let sectionSpacing: CGFloat = 24
+    public static let sectionSpacing: CGFloat = sectionGap
     /// Interior padding inside a card's content (matches `cardPadding`).
     public static let cardInnerPadding: CGFloat = 16
     /// Vertical gap between stacked elements INSIDE a card.
@@ -77,24 +76,31 @@ public extension View {
 
 // MARK: - Surface
 
-/// The one card surface — now the Bevel frosted card. PUBLIC API is unchanged
-/// (padding + content); an optional `tint` was ADDED (defaulted) so callers can opt
-/// into a per-domain accent wash without breaking existing call sites.
+/// The one card surface: native grouped-list fill, consistent inset, and no elevation.
 public struct NoopCard<Content: View>: View {
     private let padding: CGFloat
     private let tint: Color?
+    private let minHeight: CGFloat?
     @ViewBuilder private let content: () -> Content
     #if os(macOS)
     @State private var hover = false
     #endif
-    public init(padding: CGFloat = NoopMetrics.cardPadding, tint: Color? = nil, @ViewBuilder content: @escaping () -> Content) {
-        self.padding = padding; self.tint = tint; self.content = content
+    public init(
+        padding: CGFloat = NoopMetrics.cardPadding,
+        tint: Color? = nil,
+        minHeight: CGFloat? = nil,
+        @ViewBuilder content: @escaping () -> Content
+    ) {
+        self.padding = padding
+        self.tint = tint
+        self.minHeight = minHeight
+        self.content = content
     }
     public var body: some View {
         content()
             .padding(padding)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            // Hover chrome (fill + border + shadow) lives in the background so its animation is
+            .frame(maxWidth: .infinity, minHeight: minHeight, alignment: .leading)
+            // Hover chrome lives in the background so its animation is
             // scoped to the card surface ONLY. It must never animate the content() subtree, or a
             // chart inside re-animates its line every time the cursor crosses the card. (#104)
             .background { cardSurface }
@@ -103,7 +109,7 @@ public struct NoopCard<Content: View>: View {
         #endif
     }
 
-    // Touch can't hover, so iOS renders only the static resting frosted surface — no
+    // Touch can't hover, so iOS renders only the static resting grouped surface — no
     // hover @State, no .onHover tracking, no .animation node. That trims the modifier
     // count on every card, which multiplies across long scrolling lists. macOS adds the
     // hover emphasis border on top (with the #104 animation scoping) unchanged.
@@ -168,16 +174,21 @@ public struct StatTile<Accessory: View>: View {
     }
 
     public var body: some View {
-        // The tile borrows its accent as a faint card wash, so each metric tile reads as
-        // part of its colour world while staying legible on the deep blue-black.
-        NoopCard(padding: 14, tint: accent) {
+        // Keep every tile's visible card body the same height; values, captions,
+        // accessories and sparklines should not change the apparent grid gutters.
+        NoopCard(padding: 14, tint: accent, minHeight: NoopMetrics.tileHeight) {
             VStack(alignment: .leading, spacing: 0) {
                 // Header row: the metric label, and (right-aligned) the optional accessory laid out in
                 // flow so it reserves its own space rather than floating over the value below (#495).
                 HStack(alignment: .top, spacing: 4) {
-                    Text(label).strandOverline()
+                    Text(label)
+                        .strandOverline()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
+                        .frame(minHeight: 14, alignment: .topLeading)
                     Spacer(minLength: 0)
                     accessory()
+                        .frame(minWidth: 0, minHeight: 14, alignment: .topTrailing)
                 }
                 Spacer(minLength: 4)
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -197,7 +208,6 @@ public struct StatTile<Accessory: View>: View {
                 }
             }
         }
-        .frame(height: NoopMetrics.tileHeight)
         // One VoiceOver stop per tile (label, value, caption, delta) instead of up
         // to four fragmented stops; the decorative sparkline is hidden above.
         .accessibilityElement(children: .combine)
@@ -320,13 +330,8 @@ public struct InsightCard: View {
         self.category = category; self.status = status; self.detail = detail; self.statusColor = statusColor; self.tint = tint; self.titleTrailingInset = titleTrailingInset
     }
     public var body: some View {
-        // Defaults the card wash to the status colour so the coaching card sits in the
-        // same colour world as the score it summarises (e.g. gold for Charge). The
-        // insight card reads a touch stronger than a tile: an explicit hue wash
-        // (.14 → .04) + a matching .22 hue border on top of the frosted surface.
         let hue = tint ?? statusColor
-        // Apple-flat: a plain flat card. Identity comes from the COLOURED status headline alone — no extra
-        // hue-gradient wash, no border (so it reads identical to every other card on the page).
+        // Apple-flat: identity comes from the coloured status headline, not card chrome.
         return NoopCard(padding: 18, tint: hue) {
             VStack(alignment: .leading, spacing: 8) {
                 Text(category).strandOverline()

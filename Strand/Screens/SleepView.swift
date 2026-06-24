@@ -276,8 +276,7 @@ struct SleepView: View {
             }
             .padding(NoopMetrics.cardInnerPadding + NoopMetrics.space1)
             .frame(maxWidth: .infinity)
-            .timeOfDayBackground(.night)
-            .clipShape(RoundedRectangle(cornerRadius: NoopMetrics.cardRadius, style: .continuous))
+            .background(FrostedCardSurface(cornerRadius: NoopMetrics.cardRadius))
         }
     }
 
