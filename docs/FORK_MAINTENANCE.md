@@ -25,6 +25,8 @@ upstream, but pushes should go to `origin`.
 - [`docs/FORK_CHANGES.md`](FORK_CHANGES.md): running log of Zach-specific changes,
   why they exist, and what to watch during upstream syncs.
 - `git log upstream/main..HEAD`: committed fork-only changes.
+- `git merge-base HEAD upstream/main`: the common base used to interpret a
+  diverged fork before syncing.
 - `git status --short --branch`: uncommitted local work that must not be lost.
 
 ## Upstream Sync Workflow
@@ -51,13 +53,15 @@ Use this checklist when Zach asks to check for upstream updates or pull them in.
 3. Summarize what changed before merging:
 
    ```bash
+   git merge-base HEAD upstream/main
    git log --oneline --decorate HEAD..upstream/main
    git diff --stat HEAD..upstream/main
    git log --oneline --decorate upstream/main..HEAD
    ```
 
-4. Compare upstream changes against the local-change log. Pay special attention
-   to any files listed under "Watch during upstream syncs" in
+4. If both sides have moved, treat the merge base as the last shared upstream
+   commit. Compare upstream changes against the local-change log, and pay
+   special attention to any files listed under "Watch during upstream syncs" in
    [`docs/FORK_CHANGES.md`](FORK_CHANGES.md).
 
 5. Create a sync branch from the current fork state:
