@@ -136,7 +136,7 @@ struct CoachView: View {
                         .foregroundStyle(StrandPalette.textPrimary)
                 }
 
-                Text("Coach uses your own API key. Pick a provider, paste a key, and choose a model. Your key is stored securely in the Keychain and never leaves \(Platform.deviceNounPhrase) except as the request you make.")
+                Text(setupDescription)
                     .font(StrandFont.subhead)
                     .foregroundStyle(StrandPalette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -150,8 +150,18 @@ struct CoachView: View {
                         }
                     }
                     .labelsHidden()
-                    .pickerStyle(.segmented)
+                    .pickerStyle(.menu)
                     .accessibilityLabel("Provider")
+                }
+
+                if coach.provider.usesAppleFoundationModels {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Apple Intelligence").strandOverline()
+                        Text(aiCoachAppleFoundationModelsNote)
+                            .font(StrandFont.footnote)
+                            .foregroundStyle(StrandPalette.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
 
                 // Server URL (Custom / local LLM only)
@@ -177,28 +187,36 @@ struct CoachView: View {
                 }
 
                 // Model
-                modelSelector
+                if !coach.provider.usesAppleFoundationModels {
+                    modelSelector
+                }
 
                 // Key
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(coach.provider == .custom ? "API key (optional)" : "API key").strandOverline()
-                    SecureField(coach.provider == .custom
-                                ? "Only if your server requires one"
-                                : "Paste your \(coach.provider.displayName) API key", text: $keyDraft)
-                        .textFieldStyle(.plain)
-                        .font(StrandFont.body)
-                        .foregroundStyle(StrandPalette.textPrimary)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 9)
-                        .background(StrandPalette.surfaceInset, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .strokeBorder(StrandPalette.hairline, lineWidth: 1))
-                        .onSubmit { coach.provider == .custom ? connectCustom() : saveKey() }
-                        .accessibilityLabel("API key")
+                if !coach.provider.usesAppleFoundationModels {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(coach.provider == .custom ? "API key (optional)" : "API key").strandOverline()
+                        SecureField(coach.provider == .custom
+                                    ? "Only if your server requires one"
+                                    : "Paste your \(coach.provider.displayName) API key", text: $keyDraft)
+                            .textFieldStyle(.plain)
+                            .font(StrandFont.body)
+                            .foregroundStyle(StrandPalette.textPrimary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 9)
+                            .background(StrandPalette.surfaceInset, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .strokeBorder(StrandPalette.hairline, lineWidth: 1))
+                            .onSubmit { coach.provider == .custom ? connectCustom() : saveKey() }
+                            .accessibilityLabel("API key")
+                    }
                 }
 
                 HStack {
-                    if coach.provider == .custom {
+                    if coach.provider.usesAppleFoundationModels {
+                        NoopButton("Use Apple Intelligence", systemImage: "sparkles", kind: .primary) {
+                            coach.model = coach.provider.defaultModel
+                        }
+                    } else if coach.provider == .custom {
                         NoopButton("Connect", systemImage: "link", kind: .primary, action: connectCustom)
                             .disabled(coach.customBaseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     } else {
@@ -212,6 +230,14 @@ struct CoachView: View {
                 privacyFootnote
             }
         }
+    }
+
+    private var setupDescription: String {
+        if coach.provider.usesAppleFoundationModels {
+            return "Coach can use Apple Intelligence without an API key. Pick on-device for the local model, or Apple Private Cloud for the cloud-backed Apple model when it is available for your device and account."
+        }
+
+        return "Coach uses your own API key. Pick a provider, paste a key, and choose a model. Your key is stored securely in the Keychain and never leaves \(Platform.deviceNounPhrase) except as the request you make."
     }
 
     /// Model selector: a Picker over `coach.availableModels` with a free-text "Custom…" path and a
@@ -230,7 +256,7 @@ struct CoachView: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(StrandPalette.accent)
-                .disabled(!coach.hasKey)
+                .disabled(!coach.hasKey && !coach.provider.usesAppleFoundationModels)
                 .help("Fetch the available models from \(coach.provider.displayName) using your saved key")
                 .accessibilityLabel("Refresh models from provider")
             }

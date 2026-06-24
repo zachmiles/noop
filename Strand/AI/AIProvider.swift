@@ -7,8 +7,23 @@ enum AIProvider: String, CaseIterable, Identifiable {
     case anthropic
     case gemini
     case custom
+#if os(iOS)
+    case appleOnDevice
+    case applePrivateCloud
+#endif
 
     var id: String { rawValue }
+
+    var usesAppleFoundationModels: Bool {
+        switch self {
+#if os(iOS)
+        case .appleOnDevice, .applePrivateCloud:
+            return true
+#endif
+        case .openAI, .anthropic, .gemini, .custom:
+            return false
+        }
+    }
 
     var displayName: String {
         switch self {
@@ -16,6 +31,12 @@ enum AIProvider: String, CaseIterable, Identifiable {
         case .anthropic: return "Anthropic"
         case .gemini:    return "Google Gemini"
         case .custom:    return "Custom (OpenAI-compatible)"
+#if os(iOS)
+        case .appleOnDevice:
+            return "Apple On-Device"
+        case .applePrivateCloud:
+            return "Apple Private Cloud"
+#endif
         }
     }
 
@@ -25,6 +46,12 @@ enum AIProvider: String, CaseIterable, Identifiable {
         case .anthropic: return "claude-sonnet-4-6"
         case .gemini:    return "gemini-2.5-flash"
         case .custom:    return ""   // the user picks the model their server serves
+#if os(iOS)
+        case .appleOnDevice:
+            return "SystemLanguageModel.default"
+        case .applePrivateCloud:
+            return "PrivateCloudComputeLanguageModel"
+#endif
         }
     }
 
@@ -53,6 +80,10 @@ enum AIProvider: String, CaseIterable, Identifiable {
             ]
         case .custom:
             return []   // populated from the server's /models (refreshModels) or typed in
+#if os(iOS)
+        case .appleOnDevice, .applePrivateCloud:
+            return [defaultModel]
+#endif
         }
     }
 
@@ -62,6 +93,10 @@ enum AIProvider: String, CaseIterable, Identifiable {
         case .anthropic: return URL(string: "https://api.anthropic.com/v1/messages")!
         case .gemini:    return URL(string: "https://generativelanguage.googleapis.com/v1beta/models")!
         case .custom:    return AIProvider.customURL(path: "/chat/completions")
+#if os(iOS)
+        case .appleOnDevice, .applePrivateCloud:
+            return URL(string: "apple-foundation-models://local")!
+#endif
         }
     }
 
@@ -71,6 +106,10 @@ enum AIProvider: String, CaseIterable, Identifiable {
         case .anthropic: return URL(string: "https://api.anthropic.com/v1/models")!
         case .gemini:    return URL(string: "https://generativelanguage.googleapis.com/v1beta/models")!
         case .custom:    return AIProvider.customURL(path: "/models")
+#if os(iOS)
+        case .appleOnDevice, .applePrivateCloud:
+            return endpoint
+#endif
         }
     }
 
@@ -80,6 +119,12 @@ enum AIProvider: String, CaseIterable, Identifiable {
         case .anthropic: return AnthropicClient()
         case .gemini:    return GeminiClient()
         case .custom:    return CustomClient()
+#if os(iOS)
+        case .appleOnDevice:
+            return AppleFoundationModelsClient(mode: .onDevice)
+        case .applePrivateCloud:
+            return AppleFoundationModelsClient(mode: .privateCloud)
+#endif
         }
     }
 

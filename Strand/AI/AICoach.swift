@@ -18,7 +18,10 @@ import StrandImport
 
 /// One-line privacy note the UI should display verbatim near the composer / settings.
 public let aiCoachPrivacyNote =
-    "Private by default: nothing is sent until you add your own key and ask a question — only a short text summary of your metrics goes to the provider you pick."
+    "Private by default: nothing is used until you ask a question. Apple On-Device stays local; cloud providers receive only a short text summary of your metrics."
+
+public let aiCoachAppleFoundationModelsNote =
+    "Apple Foundation Models run through Apple Intelligence. On-device stays local; Private Cloud Compute uses Apple's privacy-preserving cloud model when your device and account are eligible."
 
 // MARK: - Chat model
 
@@ -257,11 +260,16 @@ final class AICoachEngine: ObservableObject {
     /// True once the coach can actually send: a stored key for the cloud providers, or — for the
     /// Custom (local) provider — a committed base URL (a key is optional there, as local servers
     /// usually need none). Gates the setup card vs. the live chat.
-    var isConfigured: Bool { provider == .custom ? customConnected : hasKey }
+    var isConfigured: Bool {
+        if provider.usesAppleFoundationModels { return true }
+        return provider == .custom ? customConnected : hasKey
+    }
 
     /// The key to send with a request: the stored key, or an empty string for the keyless Custom
     /// provider. `nil` means "not configured" — the caller surfaces `.noKey`.
     private var resolvedKey: String? {
+        if provider.usesAppleFoundationModels { return "" }
+
         if let k = AIKeyStore.read() {
             // Only send the stored key to the provider it was SAVED for — never Bearer one provider's
             // key (e.g. a cloud OpenAI/Anthropic secret) to another provider's endpoint, above all the
@@ -296,6 +304,9 @@ final class AICoachEngine: ObservableObject {
     func disconnect() {
         AIKeyStore.clear()
         customConnected = false
+        if provider.usesAppleFoundationModels {
+            provider = .openAI
+        }
         objectWillChange.send()
     }
 
@@ -330,6 +341,13 @@ final class AICoachEngine: ObservableObject {
     /// returned ids into `availableModels`. Never crashes; failures land in `errorText` and leave
     /// the existing list intact. Requires a saved key.
     func refreshModels() async {
+        if provider.usesAppleFoundationModels {
+            availableModels = provider.modelOptions
+            model = provider.defaultModel
+            errorText = nil
+            return
+        }
+
         guard let key = resolvedKey else {
             errorText = AICoachError.noKey.errorDescription
             return
