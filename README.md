@@ -582,6 +582,7 @@ That's it — copy away.
 
 ## Docs
 
+- [`docs/FORK_MAINTENANCE.md`](docs/FORK_MAINTENANCE.md) — local fork workflow for pulling upstream changes while preserving Zach-specific customizations.
 - [`CHANGELOG.md`](CHANGELOG.md) — release history and what to expect (also shown in-app under **What's new**).
 - [`DISCLAIMER.md`](DISCLAIMER.md) — trademark, interoperability, and medical/legal notice.
 - [`ATTRIBUTION.md`](ATTRIBUTION.md) — full credits and licensing notes.
