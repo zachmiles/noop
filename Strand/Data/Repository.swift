@@ -1193,9 +1193,14 @@ final class Repository: ObservableObject {
     }
 
     /// The Apple-Health series key that carries the SAME physiological quantity as a WHOOP key — used
-    /// only for the declared-compatible vitals; nil means "no Apple equivalent, don't fall back to it".
+    /// only for declared-compatible signals; nil means "no Apple equivalent, don't fall back to it".
+    /// `recovery` is included because NOOP writes Apple-Watch-derived Charge back onto the apple-health
+    /// daily row after `WatchRecovery` scores it; `steps` is included because Apple Watch is the direct
+    /// step-count source while WHOOP/noop steps can only be estimated.
     static func appleCompatibleKey(forWhoopKey key: String) -> String? {
         switch key {
+        case "recovery", "steps":
+            return key
         case "rhr":              return "resting_hr"
         case "hrv", "spo2", "resp_rate", "avg_hr", "max_hr", "in_bed_min", "active_kcal":
             return key

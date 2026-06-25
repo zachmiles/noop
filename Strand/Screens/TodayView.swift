@@ -296,10 +296,12 @@ struct TodayView: View {
         return days.last(where: { $0.recovery != nil && $0.day < selectedDayKey })
     }
 
-    /// "Last night · <date>" stamp for the carried-over recovery row, keyed on that scored day's own
-    /// date. Shared by every carried recovery read-out so the prior-day provenance reads identically.
+    /// Provenance stamp for the carried-over recovery row, keyed on that scored day's own date. It reads
+    /// "Last night" only for the immediately prior day; older carried values say "Last scored" so a June
+    /// 23 score on June 25 no longer masquerades as last night.
     private func carriedCaption(_ prior: DailyMetric) -> String {
-        "Last night · \(Self.lastChargeDateFmt(prior.day))"
+        let prefix = Self.isImmediatePriorDay(prior.day, before: selectedDayKey) ? "Last night" : "Last scored"
+        return "\(prefix) · \(Self.lastChargeDateFmt(prior.day))"
     }
 
     /// The most recent SCORED Charge to carry over on TODAY (#543) — the prior row's recovery value plus
@@ -474,6 +476,15 @@ struct TodayView: View {
     private static func lastChargeDateFmt(_ dayKey: String) -> String {
         guard let date = dayKeyParser.date(from: dayKey) else { return dayKey }
         return lastChargeDateFormatter.string(from: date)
+    }
+
+    private static func isImmediatePriorDay(_ dayKey: String, before selectedDayKey: String) -> Bool {
+        guard let day = dayKeyParser.date(from: dayKey),
+              let selected = dayKeyParser.date(from: selectedDayKey),
+              let expected = Calendar.current.date(byAdding: .day, value: -1, to: selected) else {
+            return false
+        }
+        return Calendar.current.isDate(day, inSameDayAs: expected)
     }
 
     /// Short local date for the latest scale-reading provenance row. Includes the year because a
@@ -1915,6 +1926,9 @@ struct TodayView: View {
         if let s = score {
             GlowRing(fraction: s / 100, value: s, format: { "\(Int($0.rounded()))" },
                      color: StrandPalette.chargeColor, diameter: diameter, lineWidth: diameter * 0.10)
+        } else if let carried = lastScoredCharge {
+            GlowRing(fraction: carried.value / 100, value: carried.value, format: { "\(Int($0.rounded()))" },
+                     color: StrandPalette.chargeColor, diameter: diameter, lineWidth: diameter * 0.10)
         } else {
             emptyHeroRing(diameter: diameter) { ringEmptyOverlay(d: d, diameter: diameter) }
         }
@@ -2006,11 +2020,8 @@ struct TodayView: View {
 
     /// Honest overlay shown over the Charge ring when today's recovery is nil: calibrating count, the
     /// last scored Charge carried over, or No data. After the logical-day rollover the new day has no
-    /// recovery until tonight is scored; rather than a bare "No data" on the hero ring while live HR
-    /// ticks (which reads as broken, #543), show the most recent scored Charge as a centred read-out
-    /// clearly stamped "Last night · <date>". The ring TRACK stays empty (today genuinely isn't scored,
-    /// so we never fill the GlowRing as if it were today's number) — the carried value sits inside it as
-    /// a labelled prior reading, the way WHOOP keeps last recovery visible until the new one lands.
+    /// recovery until tonight is scored; carried prior values are rendered by `chargeRing` as a filled
+    /// prior-score ring, so this overlay only covers calibration and true no-data states.
     @ViewBuilder
     private func ringEmptyOverlay(d: DailyMetric?, diameter: CGFloat) -> some View {
         VStack(spacing: 3) {
@@ -2021,22 +2032,6 @@ struct TodayView: View {
                     .lineLimit(1).minimumScaleFactor(0.7).fixedSize()
                 Text("\(n) of \(Baselines.minNightsSeed)").font(StrandFont.footnote).foregroundStyle(StrandPalette.textSecondary)
                     .lineLimit(1)
-            } else if let carried = lastScoredCharge {
-                // Ring text consistency (#hero): the carried "49%" centre number renders in the SAME size +
-                // weight as a filled ring's number (GlowRing.centerFont), so a carried Charge, a clean "93"
-                // and a "No data" ring all share one centre-number style. Its "Last night" subtitle stays a
-                // footnote, matching the calibrating subtitle.
-                Text("\(Int(carried.value.rounded()))%")
-                    .font(GlowRing.centerFont(diameter: diameter))
-                    .monospacedDigit()
-                    .foregroundStyle(StrandPalette.recoveryColor(carried.value))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.5)
-                Text(carried.caption)
-                    .font(StrandFont.footnote)
-                    .foregroundStyle(StrandPalette.textTertiary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
             } else {
                 ringNoData(diameter: diameter)
             }
@@ -3357,7 +3352,7 @@ enum MetricTileState: Equatable {
         switch self {
         case .scored:                       return nil
         case .calibrating:                  return "Calibrating"
-        case .carriedLastNight(let date):   return "Last night · \(date)"
+        case .carriedLastNight(let date):   return "Last scored · \(date)"
         case .needsStrap:                   return "Needs the strap"
         }
     }
@@ -3371,7 +3366,7 @@ enum MetricTileState: Equatable {
             // "night(s)" pluralises honestly so a single remaining night doesn't read "1 nights".
             return "Building your baseline. About \(n) more \(n == 1 ? "night" : "nights") until your scores are personal."
         case .carriedLastNight:
-            return "Tonight's lands after you sleep with the strap on."
+            return "Your next Charge lands after your next scored sleep."
         case .needsStrap:
             return "No data for today. Was your strap worn and connected overnight?"
         }
@@ -3385,7 +3380,7 @@ enum MetricTileState: Equatable {
         case .calibrating(let n):
             return "Calibrating. Building your baseline. About \(n) more \(n == 1 ? "night" : "nights") until your scores are personal."
         case .carriedLastNight(let date):
-            return "Last night, \(date). Tonight's lands after you sleep with the strap on."
+            return "Last scored, \(date). Your next Charge lands after your next scored sleep."
         case .needsStrap:
             return "Needs the strap. No data for today. Was your strap worn and connected overnight?"
         }

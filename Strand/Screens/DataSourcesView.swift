@@ -158,7 +158,7 @@ struct DataSourcesView: View {
                 .disabled(model.hasActiveImport || nutritionImporting || liftingImporting || activityFileImporting || appleHealthDeleting)
                 if importingAppleHealth { ProgressView().controlSize(.small) }
             }
-            if let progress = model.appleHealthImportProgress {
+            if let progress = model.appleHealthImportProgress, !progress.isComplete {
                 appleHealthProgressBlock(progress)
             }
             if let s = model.appleHealthImportSummary {

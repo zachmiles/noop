@@ -227,8 +227,8 @@ final class RangeReportTests: XCTestCase {
         XCTAssertEqual(report.metrics.count, 2)
         // One headline per present metric.
         XCTAssertEqual(report.headlines.count, 2)
-        // Recovery half-move (45→65, +20) dwarfs RHR's (51→55, +4) → ranked first.
-        XCTAssertTrue(report.headlines[0].contains("Recovery"))
+        // Charge half-move (45→65, +20) dwarfs RHR's (51→55, +4) → ranked first.
+        XCTAssertTrue(report.headlines[0].contains("Charge"))
         XCTAssertTrue(report.headlines[0].contains("good sign"))
         // RHR rose, and higher RHR is worse → "worth a look".
         XCTAssertTrue(report.headlines[1].contains("Resting HR"))

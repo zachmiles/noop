@@ -47,7 +47,7 @@ public enum ReportMetric: String, CaseIterable, Sendable {
         switch self {
         case .workouts:    return "Workouts"
         case .stress:      return "Stress"
-        case .recovery:    return "Recovery"
+        case .recovery:    return "Charge"
         case .sleepHours:  return "Sleep"
         case .hrv:         return "HRV"
         case .restingHr:   return "Resting HR"

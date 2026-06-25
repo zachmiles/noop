@@ -20,6 +20,7 @@ struct AppleHealthImportProgress: Equatable {
     var detail: String?
     var completed: Int?
     var total: Int?
+    var isComplete = false
 
     var fraction: Double? {
         guard let completed, let total, total > 0 else { return nil }
@@ -1282,7 +1283,19 @@ final class AppModel: ObservableObject {
             let rows = (try? await store.dailyMetrics(deviceId: id, from: fromDay, to: toDay)) ?? []
             if let latest = rows.sorted(by: { $0.day < $1.day }).last { rowsBySource[src] = latest }
         }
-        guard !rowsBySource.isEmpty else {
+
+        // Apple Health stores measured steps in appleDaily/metricSeries, not DailyMetric.steps. Pull the
+        // tall-series value into fusion so direct Watch steps can beat strap estimates in V5 surfaces.
+        var seriesFallbacks: [FusionSource: [String: Double]] = [:]
+        for (src, id) in sources {
+            let rows = (try? await store.metricSeries(deviceId: id, key: "steps",
+                                                      from: fromDay, to: toDay)) ?? []
+            if let latest = rows.sorted(by: { $0.day < $1.day }).last {
+                seriesFallbacks[src, default: [:]]["steps"] = latest.value
+            }
+        }
+
+        guard !rowsBySource.isEmpty || !seriesFallbacks.isEmpty else {
             return FusedRecord(rows: [], dayOwner: nil, contributingSourceCount: 0)
         }
 
@@ -1290,8 +1303,10 @@ final class AppModel: ObservableObject {
         var contributingSources = Set<FusionSource>()
         for spec in specs {
             var inputs: [FusionInput] = []
-            for (src, daily) in rowsBySource {
-                if let v = Self.fusionColumn(key: spec.key, day: daily) {
+            for (src, _) in sources {
+                let daily = rowsBySource[src]
+                if let v = daily.flatMap({ Self.fusionColumn(key: spec.key, day: $0) })
+                    ?? seriesFallbacks[src]?[spec.key] {
                     inputs.append(FusionInput(source: src, value: v))
                     contributingSources.insert(src)
                 }
@@ -1694,6 +1709,12 @@ final class AppModel: ObservableObject {
                 self.publishAppleProjectionProgress(status)
             }
             if status.total > 0 {
+                if reset && status.isComplete {
+                    self.appleHealthImportProgress = AppleHealthImportProgress(
+                        step: "Scoring Apple Health history",
+                        detail: "Projecting Charge from Apple Watch HRV and resting heart rate…")
+                    await self.intelligence.analyzeRecent(maxDays: 4000)
+                }
                 await self.repo.refresh()
             }
         }
@@ -1713,7 +1734,8 @@ final class AppModel: ObservableObject {
             step: status.isComplete ? "Apple Health backfill complete" : "Backfilling Apple Health history",
             detail: detail,
             completed: status.processed,
-            total: status.total)
+            total: status.total,
+            isComplete: status.isComplete)
     }
 
     private func applyAppleHealthImportProgress(_ event: AppleHealthImport.ProgressEvent) {

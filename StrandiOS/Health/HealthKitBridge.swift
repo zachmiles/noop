@@ -216,7 +216,7 @@ final class HealthKitBridge: ObservableObject {
     /// measurements current after new Health samples land.
     private static let liveQuantityIds: [HKQuantityTypeIdentifier] = [
         .heartRateVariabilitySDNN, .restingHeartRate, .activeEnergyBurned, .heartRate, .vo2Max,
-        .bodyMass, .height
+        .stepCount, .bodyMass, .bodyFatPercentage, .leanBodyMass, .bodyMassIndex, .height
     ]
 
     /// Long-lived observer queries, retained so HealthKit doesn't tear them down. Keyed by the sample

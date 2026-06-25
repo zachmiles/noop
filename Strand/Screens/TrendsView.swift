@@ -55,6 +55,7 @@ struct TrendsView: View {
     /// the Today Rest score (#732). sleep_performance is a metricSeries, not a DailyMetric field, so load
     /// it once (mirroring TodayView's restScore source) and key by day for `resolve` below.
     @State private var sleepPerfByDay: [String: Double] = [:]
+    @State private var recoveryByDay: [String: Double] = [:]
 
     // #710 — browse previous weeks in the Week-in-review digest. 0 = the week containing today; each step
     // back is one Mon–Sun week earlier. Clamped so it never runs past the earliest day we hold (see
@@ -225,7 +226,7 @@ struct TrendsView: View {
                 // down — rangeBar/heroRecovery/smallMultiples all reuse these
                 // instead of re-filtering repo.days through caption/widened/
                 // windowPoints on every render (hover, animation, 1 Hz HR tick).
-                let recovery = resolve { $0.recovery }
+                let recovery = resolve { recoveryByDay[$0.day] ?? $0.recovery }
                 let hrv = resolve { $0.avgHrv }
                 let rhr = resolve { $0.restingHr.map(Double.init) }
                 let strain = resolve { $0.strain }
@@ -264,9 +265,13 @@ struct TrendsView: View {
         // Rest score uses (not raw efficiency). Mirrors TodayView's restScore read. Keyed on the day
         // count so a newly-banked/-scored night refreshes Rest reactively, like the other metrics that
         // read `repo.days` directly (and like the Android LaunchedEffect(days) twin).
-        .task(id: repo.days.count) {
-            let s = await repo.exploreSeries(key: "sleep_performance", source: "my-whoop")
-            sleepPerfByDay = Dictionary(s.map { ($0.day, $0.value) }, uniquingKeysWith: { _, last in last })
+        .task(id: repo.refreshSeq) {
+            async let restSeries = repo.exploreSeries(key: "sleep_performance", source: "my-whoop")
+            async let chargeSeries = repo.resolvedSeries(key: "recovery", source: "my-whoop").values
+            let rest = await restSeries
+            let charge = await chargeSeries
+            sleepPerfByDay = Dictionary(rest.map { ($0.day, $0.value) }, uniquingKeysWith: { _, last in last })
+            recoveryByDay = Dictionary(charge.map { ($0.day, $0.value) }, uniquingKeysWith: { _, last in last })
         }
     }
 
@@ -392,9 +397,9 @@ struct TrendsView: View {
         if chargeAvg != nil || effortAvg != nil || restAvg != nil {
             NoopCard(tint: StrandPalette.chargeColor) {
                 VStack(alignment: .leading, spacing: NoopMetrics.cardInnerSpacing) {
-                    SectionHeader("Week in review", overline: "Charge · Effort · Rest")
+                    SectionHeader("Week in review", overline: "Window averages")
                     if let v = chargeAvg {
-                        pipScoreRow(label: "Charge", value: v, range: 0...100,
+                        pipScoreRow(label: "Charge avg", value: v, range: 0...100,
                                     tint: StrandPalette.chargeColor,
                                     format: { "\(Int($0.rounded()))" })
                     }
@@ -407,12 +412,12 @@ struct TrendsView: View {
                         // On the 0–21 WHOOP scale Effort reads to one decimal (e.g. "9.0"); on the 0–100
                         // scale it's a whole number — match `effortScaleMax` so the count-up format agrees.
                         let oneDecimal = effortScale == .whoop
-                        pipScoreRow(label: "Effort", value: display, range: 0...maxV,
+                        pipScoreRow(label: "Effort avg", value: display, range: 0...maxV,
                                     tint: StrandPalette.effortColor,
                                     format: { oneDecimal ? String(format: "%.1f", $0) : "\(Int($0.rounded()))" })
                     }
                     if let v = restAvg {
-                        pipScoreRow(label: "Rest", value: v, range: 0...100,
+                        pipScoreRow(label: "Rest avg", value: v, range: 0...100,
                                     tint: StrandPalette.restColor,
                                     format: { "\(Int($0.rounded()))" })
                     }
@@ -516,7 +521,7 @@ struct TrendsView: View {
             title: "Charge",
             // The range bar above already prints the authoritative reading-count caption;
             // the hero only names its window so the count isn't doubled in one card height.
-            subtitle: rangeSubtitle,
+            subtitle: "\(rangeSubtitle) avg",
             trailing: avg.map { "\(Int($0.rounded()))" },
             height: NoopMetrics.chartHeight,
             tint: StrandPalette.chargeColor,

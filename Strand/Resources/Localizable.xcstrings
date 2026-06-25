@@ -7325,6 +7325,9 @@
         }
       }
     },
+    "Charge avg" : {
+
+    },
     "Charge model" : {
       "localizations" : {
         "de" : {
@@ -11562,6 +11565,9 @@
           }
         }
       }
+    },
+    "Effort avg" : {
+
     },
     "EFFORT BUILDING" : {
       "localizations" : {
@@ -16291,6 +16297,7 @@
       }
     },
     "Last night · %@" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -16349,6 +16356,9 @@
           }
         }
       }
+    },
+    "Last scored · %@" : {
+
     },
     "Last sleep" : {
       "localizations" : {
@@ -26165,6 +26175,9 @@
         }
       }
     },
+    "Rest avg" : {
+
+    },
     "Rest baseline" : {
       "localizations" : {
         "de" : {
@@ -32292,6 +32305,7 @@
       }
     },
     "Tonight's lands after you sleep with the strap on." : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -35013,6 +35027,9 @@
         }
       }
     },
+    "Window averages" : {
+
+    },
     "Wire NOOP's actions into a Back-Tap, a focus automation, or a longer Shortcut — for example, double-tap the back of your iPhone to buzz the strap." : {
       "localizations" : {
         "de" : {
@@ -35808,6 +35825,9 @@
           }
         }
       }
+    },
+    "Your next Charge lands after your next scored sleep." : {
+
     },
     "your number, date and any note" : {
       "localizations" : {

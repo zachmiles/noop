@@ -110,12 +110,12 @@ private struct AppToastCoordinator: ViewModifier {
                 }
                 center.show(AppToast(
                     key: "apple-health-import",
-                    symbol: "arrow.triangle.2.circlepath",
+                    symbol: progress.isComplete ? "checkmark.circle.fill" : "arrow.triangle.2.circlepath",
                     title: progress.step,
                     message: (progress.detail ?? "Working on Apple Health data.") + count,
-                    tone: .syncing,
-                    showsProgress: true,
-                    displayMode: .sticky
+                    tone: progress.isComplete ? .success : .syncing,
+                    showsProgress: !progress.isComplete,
+                    displayMode: progress.isComplete ? .timed(3.8) : .sticky
                 ))
             }
             .onReceive(model.$whoopImportSummary.compactMap { $0 }) { summary in

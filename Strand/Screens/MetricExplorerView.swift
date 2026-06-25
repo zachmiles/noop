@@ -145,6 +145,7 @@ struct MetricExplorerView: View {
     /// metric.id → whether its series is empty. Filled INCREMENTALLY by `probeEmptiness()`; a metric
     /// absent from the map simply has no empty-dot yet (rows never wait on it — see `MetricRow`).
     @State private var emptyByID: [String: Bool] = [:]
+    @State private var latestByID: [String: MetricPreview] = [:]
     @State private var probedRefreshSeq: Int?
     /// True while the empty-dot probe is still running its first pass. Drives a small inline progress
     /// hint in the header, never gating the rows: the catalog is static, so every row's label/icon/unit
@@ -215,7 +216,8 @@ struct MetricExplorerView: View {
                                         MetricDetailView(metric: metric)
                                     } label: {
                                         MetricRow(metric: metric,
-                                                  isEmpty: emptyByID[metric.id] ?? false)
+                                                  isEmpty: emptyByID[metric.id] ?? false,
+                                                  latest: latestByID[metric.id])
                                     }
                                     // Full-row press-down feedback (square corners — the row spans the
                                     // card edge-to-edge, dividers between).
@@ -292,23 +294,40 @@ struct MetricExplorerView: View {
         guard probedRefreshSeq != refreshSeq || emptyByID.isEmpty else { probing = false; return }
         probedRefreshSeq = refreshSeq
         emptyByID = [:]
+        latestByID = [:]
         probing = true
         for metric in MetricCatalog.all {
             guard !Task.isCancelled else { return }
-            let s = await repo.exploreSeries(key: metric.key, source: metric.source)
+            let s = await loadCatalogSeries(metric)
             guard !Task.isCancelled else { return }
             emptyByID[metric.id] = s.isEmpty
+            latestByID[metric.id] = s.last.map { MetricPreview(day: $0.day, value: $0.value) }
             await Task.yield()
         }
         probing = false
+    }
+
+    private func loadCatalogSeries(_ metric: MetricDescriptor) async -> [(day: String, value: Double)] {
+        switch metric.source {
+        case Repository.whoopSource, Repository.appleHealthSource:
+            return await repo.resolvedSeries(key: metric.key, source: metric.source).values
+        default:
+            return await repo.exploreSeries(key: metric.key, source: metric.source)
+        }
     }
 }
 
 // MARK: - One catalog row
 
+private struct MetricPreview {
+    let day: String
+    let value: Double
+}
+
 private struct MetricRow: View {
     let metric: MetricDescriptor
     let isEmpty: Bool
+    let latest: MetricPreview?
 
     // Trailing unit chip follows the Imperial/Metric preference (kg→lb, °C→°F) and the Effort scale
     // (/100→/21, #268).
@@ -320,6 +339,13 @@ private struct MetricRow: View {
         let temp = UnitPrefs.resolveTemperature(system: system, override: temperatureRaw)
         let effort = UnitPrefs.resolveEffortScale(effortScaleRaw)
         return metric.displayUnit(system: system, temperature: temp, effortScale: effort)
+    }
+    private var previewLabel: String? {
+        guard let latest else { return nil }
+        let system = UnitSystem(rawValue: unitSystemRaw) ?? .metric
+        let temp = UnitPrefs.resolveTemperature(system: system, override: temperatureRaw)
+        let effort = UnitPrefs.resolveEffortScale(effortScaleRaw)
+        return metric.format(latest.value, system: system, temperature: temp, effortScale: effort)
     }
 
     var body: some View {
@@ -344,7 +370,13 @@ private struct MetricRow: View {
 
             Spacer(minLength: 8)
 
-            if !unitLabel.isEmpty {
+            if let previewLabel {
+                Text(previewLabel)
+                    .font(StrandFont.captionNumber)
+                    .foregroundStyle(StrandPalette.textSecondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+            } else if !unitLabel.isEmpty {
                 Text(unitLabel)
                     .font(StrandFont.captionNumber)
                     .foregroundStyle(StrandPalette.textSecondary)
@@ -364,7 +396,7 @@ private struct MetricRow: View {
         .padding(.vertical, 11)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(metric.title), \(unitLabel.isEmpty ? metric.category : unitLabel)\(isEmpty ? ", no data" : "")")
+        .accessibilityLabel("\(metric.title), \(previewLabel ?? (unitLabel.isEmpty ? metric.category : unitLabel))\(isEmpty ? ", no data" : "")")
         .accessibilityAddTraits(.isButton)
     }
 }
@@ -509,16 +541,25 @@ struct MetricDetailView: View {
     }
 
     private func load() async {
-        series = await repo.exploreSeries(key: metric.key, source: metric.source)
+        series = await loadCatalogSeries(metric)
         var loadedOthers: [(metric: MetricDescriptor, series: [(day: String, value: Double)])] = []
         for other in MetricCatalog.all where other.id != metric.id {
-            let s = await repo.exploreSeries(key: other.key, source: other.source)
+            let s = await loadCatalogSeries(other)
             if !s.isEmpty { loadedOthers.append((other, s)) }
         }
         others = loadedOthers
         loaded = true
         // First correlation build, now that `series`/`others` exist.
         recomputeCorrelations()
+    }
+
+    private func loadCatalogSeries(_ descriptor: MetricDescriptor) async -> [(day: String, value: Double)] {
+        switch descriptor.source {
+        case Repository.whoopSource, Repository.appleHealthSource:
+            return await repo.resolvedSeries(key: descriptor.key, source: descriptor.source).values
+        default:
+            return await repo.exploreSeries(key: descriptor.key, source: descriptor.source)
+        }
     }
 
     // MARK: Scenic hero
