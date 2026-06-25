@@ -143,6 +143,9 @@ public struct SectionHeader: View {
             Spacer()
             if let trailing {
                 Text(trailing).font(StrandFont.footnote).foregroundStyle(StrandPalette.textSecondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .fixedSize(horizontal: true, vertical: false)
             }
         }
     }
@@ -371,6 +374,8 @@ public struct SegmentedPillControl<T: Hashable>: View {
                 } label: {
                     Text(label(item))
                         .font(StrandFont.captionNumber)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
                         // Active segment is SELECTION CHROME, so it follows the accent: on dark a
                         // gold-gradient pill with gold-deep ink; on light a flat blue accent pill with
                         // white ink (so the light theme's selection matches its blue chrome, not gold).

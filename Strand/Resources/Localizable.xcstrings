@@ -680,6 +680,16 @@
         }
       }
     },
+    "%@, %@ from Health" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@, %2$@ from Health"
+          }
+        }
+      }
+    },
     "%@, %@: %@" : {
       "localizations" : {
         "de" : {
@@ -819,6 +829,9 @@
           }
         }
       }
+    },
+    "%@, no Health measurement" : {
+
     },
     "%@, range %@ to %@" : {
       "localizations" : {
@@ -14205,6 +14218,7 @@
       }
     },
     "Height in inches" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -14227,6 +14241,7 @@
       }
     },
     "Height, %lld feet %lld inches" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -33905,6 +33920,7 @@
       }
     },
     "Weight in pounds" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -33927,6 +33943,7 @@
       }
     },
     "Weight, %lld pounds" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {

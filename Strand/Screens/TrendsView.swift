@@ -479,16 +479,30 @@ struct TrendsView: View {
         let cap = recovery.caption
         let isWide = recovery.widened
         return VStack(alignment: .leading, spacing: NoopMetrics.space2) {
-            HStack {
-                SegmentedPillControl(Range.allCases, selection: $range) { $0.label }
-                Spacer()
-                Text(rangeSubtitle).strandOverline()
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: NoopMetrics.space2) {
+                    SegmentedPillControl(Range.allCases, selection: $range) { $0.label }
+                    Spacer(minLength: NoopMetrics.space2)
+                    rangeSubtitleLabel
+                }
+                .fixedSize(horizontal: true, vertical: false)
+                VStack(alignment: .leading, spacing: NoopMetrics.space2) {
+                    rangeSubtitleLabel
+                    SegmentedPillControl(Range.allCases, selection: $range) { $0.label }
+                }
             }
             Text(cap)
                 .font(StrandFont.footnote)
                 .foregroundStyle(isWide ? StrandPalette.statusWarning : StrandPalette.textTertiary)
                 .accessibilityLabel(cap)
         }
+    }
+
+    private var rangeSubtitleLabel: some View {
+        Text(rangeSubtitle).strandOverline()
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
+            .fixedSize(horizontal: true, vertical: false)
     }
 
     // MARK: Hero — recovery over time

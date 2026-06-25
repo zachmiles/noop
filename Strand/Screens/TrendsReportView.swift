@@ -226,6 +226,9 @@ struct TrendsReportPage: View {
                         .foregroundStyle(StrandPalette.accent)
                     Spacer()
                     Text(range.longName).strandOverline()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                        .fixedSize(horizontal: true, vertical: false)
                 }
                 Text("Trends report")
                     .font(StrandFont.title1)

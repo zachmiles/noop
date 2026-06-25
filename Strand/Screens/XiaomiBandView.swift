@@ -210,15 +210,29 @@ struct XiaomiBandView: View {
 
     private var rangeControl: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                SegmentedPillControl(RangeWindow.allCases, selection: $range) { $0.label }
-                Spacer()
-                Text(range.caption).strandOverline()
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: NoopMetrics.space2) {
+                    SegmentedPillControl(RangeWindow.allCases, selection: $range) { $0.label }
+                    Spacer(minLength: NoopMetrics.space2)
+                    rangeCaptionLabel
+                }
+                .fixedSize(horizontal: true, vertical: false)
+                VStack(alignment: .leading, spacing: NoopMetrics.space2) {
+                    rangeCaptionLabel
+                    SegmentedPillControl(RangeWindow.allCases, selection: $range) { $0.label }
+                }
             }
             Text(rangeSummaryCaption)
                 .font(StrandFont.footnote)
                 .foregroundStyle(StrandPalette.textTertiary)
         }
+    }
+
+    private var rangeCaptionLabel: some View {
+        Text(range.caption).strandOverline()
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
+            .fixedSize(horizontal: true, vertical: false)
     }
 
     private var rangeSummaryCaption: String {
