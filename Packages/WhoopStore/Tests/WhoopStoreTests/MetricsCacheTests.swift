@@ -364,6 +364,31 @@ final class MetricsCacheTests: XCTestCase {
         XCTAssertEqual(rows.map { $0.day }, ["2026-05-20"])
     }
 
+    func testDailyMetricCountAndCursorLimitedRead() async throws {
+        let store = try await WhoopStore.inMemory()
+        let bare: (String) -> DailyMetric = { day in
+            DailyMetric(day: day, totalSleepMin: nil, efficiency: nil, deepMin: nil, remMin: nil,
+                        lightMin: nil, disturbances: nil, restingHr: nil, avgHrv: nil,
+                        recovery: nil, strain: nil, exerciseCount: nil)
+        }
+        try await store.upsertDailyMetrics([
+            bare("2026-05-01"),
+            bare("2026-05-02"),
+            bare("2026-05-03"),
+            bare("2026-05-04"),
+        ], deviceId: "devA")
+        try await store.upsertDailyMetrics([bare("2026-05-02")], deviceId: "other")
+
+        let count = try await store.dailyMetricCount(deviceId: "devA", from: "2026-05-01", to: "2026-05-31")
+        XCTAssertEqual(count, 4)
+
+        let firstBatch = try await store.dailyMetricsAfter(deviceId: "devA", after: nil, to: "2026-05-31", limit: 2)
+        XCTAssertEqual(firstBatch.map(\.day), ["2026-05-01", "2026-05-02"])
+
+        let secondBatch = try await store.dailyMetricsAfter(deviceId: "devA", after: "2026-05-02", to: "2026-05-31", limit: 2)
+        XCTAssertEqual(secondBatch.map(\.day), ["2026-05-03", "2026-05-04"])
+    }
+
     // MARK: - windowed computed-daily delete (#277 local-day re-bucketing migration)
 
     func testDeleteDailyMetricsInRangeKeepsImportedAndOutOfRange() async throws {

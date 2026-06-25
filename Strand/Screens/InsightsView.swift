@@ -245,58 +245,65 @@ struct InsightsView: View {
     // MARK: - Load
 
     private func load() async {
-        // Journal → behaviours map (only "yes" answers count as the behaviour occurring).
-        // journalEntries() is the imported ∪ native union (native wins per day+question).
-        let entries = await repo.journalEntries()
-        var byBehaviour: [String: Set<String>] = [:]
-        for e in entries where e.answeredYes {
-            byBehaviour[e.question, default: []].insert(e.day)
-        }
-
-        // The logging card's inputs: the export's exact question strings (so logged days join
-        // imported history) and the selected day's native chip state — a targeted read, since the
-        // merged list carries no deviceId to filter on.
-        let imported = await repo.importedJournalEntries()
-        let importedQs = NSOrderedSet(array: imported.map(\.question)).array as? [String] ?? []
         let selectedDayKey = Repository.localDayKey(
             Calendar.current.date(byAdding: .day, value: -journalDayOffset, to: Date()) ?? Date())
-        let nativeAnswers = await repo.nativeJournalAnswers(day: selectedDayKey)
+        let outcomeKeys = self.outcomeKeys
 
-        // Daily metrics for the strap-only outcome fallback (merged, imported-wins). The view is
-        // MainActor-isolated, so reading the published cache here is on the right actor.
+        async let entriesA = repo.journalEntries()
+        async let importedA = repo.importedJournalEntries()
+        async let nativeAnswersA = repo.nativeJournalAnswers(day: selectedDayKey)
+        async let outcomeSeriesA = repo.series(keys: outcomeKeys, source: "my-whoop")
+        async let workoutsA = repo.workoutRows()
+
+        // Daily metrics for the strap-only outcome fallback (merged, imported-wins).
         let mergedDays = repo.days
 
-        // Outcome series (Whoop) → both [day:value] dictionaries and ordered series. The imported
-        // metricSeries only exists after a CSV import; fill the days it doesn't cover from the
-        // merged daily metrics so an account-free user's logging still gets effects
-        // (recovery/hrv/rhr have daily columns; sleep_performance stays import-only).
-        var byKey: [String: [String: Double]] = [:]
-        var seriesMap: [String: [(day: String, value: Double)]] = [:]
-        for key in outcomeKeys {
-            let s = await repo.series(key: key, source: "my-whoop")
-            var dict: [String: Double] = [:]
-            for row in s { dict[row.day] = row.value }
-            for d in mergedDays where dict[d.day] == nil {
-                if let v = Self.dailyOutcome(key: key, day: d) { dict[d.day] = v }
-            }
-            byKey[key] = dict
-            seriesMap[key] = dict.sorted { $0.key < $1.key }.map { (day: $0.key, value: $0.value) }
-        }
+        let entries = await entriesA
+        let imported = await importedA
+        let nativeAnswers = await nativeAnswersA
+        let outcomeSeries = await outcomeSeriesA
+        let workouts = await workoutsA
 
-        // Activity Cost (#439): shape the engine's inputs in the VIEW, not the engine. From the loaded
-        // sessions build [sport: Set<localDayKey>] — collapsing detected/"Activity" into one bucket via
-        // displaySport, keeping manual/imported labels — keyed by the LOCAL calendar day the session
-        // STARTED (the same local-day calendar DailyMetric.day uses, so the engine's D+1 alignment is
-        // honest). The recovery side is [localDayKey: Charge] off the merged DailyMetric.recovery.
-        let costs = Self.computeActivityCosts(workouts: await repo.workoutRows(), days: mergedDays)
+        let shaped = await Task.detached(priority: .userInitiated) {
+            // Journal → behaviours map (only "yes" answers count as the behaviour occurring).
+            var byBehaviour: [String: Set<String>] = [:]
+            for e in entries where e.answeredYes {
+                byBehaviour[e.question, default: []].insert(e.day)
+            }
+
+            var importedQs: [String] = []
+            var seenQuestions = Set<String>()
+            for question in imported.map(\.question) where seenQuestions.insert(question).inserted {
+                importedQs.append(question)
+            }
+
+            // Outcome series (Whoop) → both [day:value] dictionaries and ordered series. The imported
+            // metricSeries only exists after a CSV import; fill the days it doesn't cover from the
+            // merged daily metrics so an account-free user's logging still gets effects.
+            var byKey: [String: [String: Double]] = [:]
+            var seriesMap: [String: [(day: String, value: Double)]] = [:]
+            for key in outcomeKeys {
+                var dict: [String: Double] = [:]
+                for row in outcomeSeries[key] ?? [] { dict[row.day] = row.value }
+                for d in mergedDays where dict[d.day] == nil {
+                    if let v = Self.dailyOutcome(key: key, day: d) { dict[d.day] = v }
+                }
+                byKey[key] = dict
+                seriesMap[key] = dict.sorted { $0.key < $1.key }.map { (day: $0.key, value: $0.value) }
+            }
+
+            // Activity Cost (#439): shape [sport: Set<localDayKey>] and [day: Charge] off the UI actor.
+            let costs = Self.computeActivityCosts(workouts: workouts, days: mergedDays)
+            return (byBehaviour, importedQs, byKey, seriesMap, costs)
+        }.value
 
         await MainActor.run {
-            self.behaviours = byBehaviour
-            self.importedQuestions = importedQs
+            self.behaviours = shaped.0
+            self.importedQuestions = shaped.1
             self.dayAnswers = nativeAnswers
-            self.outcomeByKey = byKey
-            self.seriesByKey = seriesMap
-            self.activityCosts = costs
+            self.outcomeByKey = shaped.2
+            self.seriesByKey = shaped.3
+            self.activityCosts = shaped.4
             self.loaded = true
             // Seed the memoized derived state from the freshly loaded inputs.
             self.recomputeRanked()

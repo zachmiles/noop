@@ -463,14 +463,17 @@ struct TodayView: View {
         f.dateFormat = "yyyy-MM-dd"
         return f
     }()
+    private static let lastChargeDateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale.current
+        f.setLocalizedDateFormatFromTemplate("dMMM")
+        return f
+    }()
     /// "d MMM" for a stored `yyyy-MM-dd` day key, used by the carried-over Charge caption (#543). Falls
     /// back to the raw key if it can't be parsed so the caption is never empty.
     private static func lastChargeDateFmt(_ dayKey: String) -> String {
         guard let date = dayKeyParser.date(from: dayKey) else { return dayKey }
-        let f = DateFormatter()
-        f.locale = Locale.current
-        f.setLocalizedDateFormatFromTemplate("dMMM")
-        return f.string(from: date)
+        return lastChargeDateFormatter.string(from: date)
     }
 
     /// Short local date for the latest scale-reading provenance row. Includes the year because a
@@ -479,6 +482,30 @@ struct TodayView: View {
         let f = DateFormatter()
         f.locale = Locale.current
         f.setLocalizedDateFormatFromTemplate("dMMMy")
+        return f
+    }()
+    private static let dateLineFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "EEEE, d MMMM"
+        return f
+    }()
+    private static let selectedDayOverlineFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "EEE d MMM"
+        return f
+    }()
+    private static let workoutDateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "d MMM"
+        return f
+    }()
+    private static let integerFormatter: NumberFormatter = {
+        let f = NumberFormatter()
+        f.numberStyle = .decimal
+        f.maximumFractionDigits = 0
         return f
     }()
 
@@ -860,7 +887,11 @@ struct TodayView: View {
         }
         // Reload when the data refreshes OR the selected day changes — the HR trend and Rest score are
         // day-scoped, so navigating must re-fetch them for the newly selected window.
-        .task(id: TodayLoadKey(seq: repo.refreshSeq, offset: selectedDayOffset)) { await loadAll() }
+        .task(id: TodayLoadKey(seq: repo.refreshSeq, offset: selectedDayOffset)) {
+            guard repo.loaded else { return }
+            await Task.yield()
+            await loadAll()
+        }
         // Persist the freshly-built derivations so subsequent (1 Hz) renders with the same
         // inputs hit the cache instead of recomputing. Writing @State during `body` is not
         // allowed, so commit it after layout — the memoized accessors already return the
@@ -2610,31 +2641,24 @@ struct TodayView: View {
     // MARK: - Loading
 
     private func loadAll() async {
-        // 14-day sparklines — Whoop + Apple Health. These reads are mutually independent (distinct
-        // metric keys/sources), so kick them all off concurrently with `async let` and await the
-        // results below. Each hits the @MainActor Repository, fires its `await store.*` on the
-        // WhoopStore actor and suspends — releasing the main actor so the next read can start —
-        // instead of fully round-tripping one at a time. The assignments below stay on the main
-        // actor and the final values are byte-identical to the sequential version.
-        async let recoverySpark      = sparkValues("recovery", source: "my-whoop", window: 14)
-        async let strainSpark        = sparkValues("strain", source: "my-whoop", window: 14)
-        async let sleepTotalSpark    = sparkValues("sleep_total_min", source: "my-whoop", window: 14)
-        async let hrvSpark           = sparkValues("hrv", source: "my-whoop", window: 14)
-        async let rhrSpark           = sparkValues("rhr", source: "my-whoop", window: 14)
-        async let spo2Spark          = sparkValues("spo2", source: "my-whoop", window: 14)
-        async let respRateSpark      = sparkValues("resp_rate", source: "apple-health", window: 14)
-        async let stepsAppleSpark    = sparkValues("steps", source: "apple-health", window: 14)
+        // 14-day sparklines — grouped by source so dashboard mount does one indexed metricSeries read per
+        // source instead of one actor hop + one SQLite statement per tile.
+        let whoopSparkKeys = ["recovery", "strain", "sleep_total_min", "hrv", "rhr", "spo2"]
+        let appleSparkKeys = ["resp_rate", "steps", "active_kcal"]
+        async let whoopSparkSeriesA = repo.series(keys: whoopSparkKeys, source: "my-whoop")
+        async let appleSparkSeriesA = repo.series(keys: appleSparkKeys, source: Repository.appleHealthSource)
         async let weightSpark        = resolvedSparkValues("weight", source: Repository.appleHealthSource, window: 90)
-        async let activeKcalSpark    = sparkValues("active_kcal", source: "apple-health", window: 14)
 
-        sparks["recovery"]        = await recoverySpark
-        sparks["strain"]          = await strainSpark
-        sparks["sleep_total_min"] = await sleepTotalSpark
-        sparks["hrv"]             = await hrvSpark
-        sparks["rhr"]             = await rhrSpark
-        sparks["spo2"]            = await spo2Spark
-        sparks["resp_rate"]   = await respRateSpark
-        sparks["steps"]       = await stepsAppleSpark
+        let whoopSparkSeries = await whoopSparkSeriesA
+        let appleSparkSeries = await appleSparkSeriesA
+        sparks["recovery"]        = sparkValues(from: whoopSparkSeries["recovery"] ?? [], window: 14)
+        sparks["strain"]          = sparkValues(from: whoopSparkSeries["strain"] ?? [], window: 14)
+        sparks["sleep_total_min"] = sparkValues(from: whoopSparkSeries["sleep_total_min"] ?? [], window: 14)
+        sparks["hrv"]             = sparkValues(from: whoopSparkSeries["hrv"] ?? [], window: 14)
+        sparks["rhr"]             = sparkValues(from: whoopSparkSeries["rhr"] ?? [], window: 14)
+        sparks["spo2"]            = sparkValues(from: whoopSparkSeries["spo2"] ?? [], window: 14)
+        sparks["resp_rate"]       = sparkValues(from: appleSparkSeries["resp_rate"] ?? [], window: 14)
+        sparks["steps"]           = sparkValues(from: appleSparkSeries["steps"] ?? [], window: 14)
         // Steps prefer the strap's own @57 daily total (no metricSeries — it lives on the daily row),
         // so a strap-only WHOOP 5/MG user gets a steps trend without Apple Health. Falls back to the
         // Apple Health series above when the strap supplied no steps (#276). This synchronous overwrite
@@ -2642,38 +2666,33 @@ struct TodayView: View {
         let strapSteps = repo.days.suffix(14).compactMap { $0.steps.map(Double.init) }
         if !strapSteps.isEmpty { sparks["steps"] = strapSteps }
         sparks["weight"]      = await weightSpark
-        sparks["active_kcal"] = await activeKcalSpark
+        sparks["active_kcal"] = sparkValues(from: appleSparkSeries["active_kcal"] ?? [], window: 14)
 
         // The next block of reads are all mutually independent (distinct keys/sources, none consumes
         // another's result): the Rest + steps-estimate series, the two provenance resolves, workout +
         // Apple-daily rows, the two Mi-Band series, and the three "your cards" series. Fire them all
         // off concurrently with `async let`, then await each where its result is first used — same
         // data, same derivations, same assignment order as the sequential version, all on the main actor.
-        async let restSeriesA       = repo.exploreSeries(key: "sleep_performance", source: "my-whoop")
-        async let stepsEstSeriesA    = repo.exploreSeries(key: "steps_est", source: "my-whoop")
+        let whoopExploreKeys = ["sleep_performance", "steps_est", "stress", "fitness_age", "vitality"]
+        async let whoopExploreSeriesA = repo.exploreSeries(keys: whoopExploreKeys, source: "my-whoop")
         async let recoveryResolvedA  = repo.resolvedSeries(key: "recovery", source: Repository.whoopSource)
         async let restResolvedA      = repo.resolvedSeries(key: "sleep_performance", source: Repository.whoopSource)
         async let workoutsA          = repo.workoutRows()
         async let appleDaysA         = repo.appleDailyRows()
-        async let xStepsA            = repo.series(key: "steps", source: "xiaomi-band")
-        async let xSleepA            = repo.series(key: "sleep_total_min", source: "xiaomi-band")
+        async let xiaomiSeriesA      = repo.series(keys: ["steps", "sleep_total_min"], source: "xiaomi-band")
         async let renphoScaleReadingA = repo.latestRenphoScaleReading()
-        async let stressSeriesA      = repo.exploreSeries(key: "stress", source: "my-whoop")
-        async let fitnessAgeSeriesA  = repo.exploreSeries(key: "fitness_age", source: "my-whoop")
-        async let vitalitySeriesA    = repo.exploreSeries(key: "vitality", source: "my-whoop")
         async let whoopRhrA          = repo.resolvedSeries(key: "rhr", source: Repository.whoopSource)
         async let whoopHrvA          = repo.resolvedSeries(key: "hrv", source: Repository.whoopSource)
         async let whoopSleepA        = repo.resolvedSeries(key: "sleep_total_min", source: Repository.whoopSource)
         async let whoopRestA         = repo.resolvedSeries(key: "sleep_performance", source: Repository.whoopSource)
-        async let appleRhrA          = repo.series(key: "resting_hr", source: Repository.appleHealthSource)
-        async let appleHrvA          = repo.series(key: "hrv", source: Repository.appleHealthSource)
-        async let appleSleepA        = repo.series(key: "asleep_min", source: Repository.appleHealthSource)
-        async let appleRestA         = repo.series(key: "sleep_performance", source: Repository.appleHealthSource)
+        async let appleComparisonSeriesA = repo.series(keys: ["resting_hr", "hrv", "asleep_min", "sleep_performance"],
+                                                       source: Repository.appleHealthSource)
 
         // Rest SCORE for the logical day. `exploreSeries` already merges imported + computed
         // `sleep_performance` (imported-wins), so a Bluetooth-only user sees the on-device Rest
         // composite and an importer sees the export's figure — exactly like the Rest detail screen.
-        let restSeries = await restSeriesA
+        let whoopExploreSeries = await whoopExploreSeriesA
+        let restSeries = whoopExploreSeries["sleep_performance"] ?? []
         let restByDay = Dictionary(restSeries.map { ($0.day, $0.value) }, uniquingKeysWith: { _, last in last })
         // The Rest TILE's sparkline (#614 follow-up). The tile's number is `restScore` (the Rest composite,
         // 0–100) but its mini-graph used to plot raw sleep MINUTES (`sparks["sleep_total_min"]`), so the
@@ -2685,7 +2704,7 @@ struct TodayView: View {
         // "-noop" metricSeries the IntelligenceEngine writes, exactly like the Explore "steps_est" metric.
         // Only consulted when a day has no REAL step count (see the .steps tile), so it never overrides a
         // measured value — it just fills the gap a 4.0 user would otherwise see as "—".
-        let stepsEstSeries = await stepsEstSeriesA
+        let stepsEstSeries = whoopExploreSeries["steps_est"] ?? []
         stepsEstByDay = Dictionary(stepsEstSeries.map { ($0.day, Int($0.value.rounded())) },
                                    uniquingKeysWith: { _, last in last })
         // The selected day's Rest, falling back to the series tail only when today itself is selected —
@@ -2711,24 +2730,26 @@ struct TodayView: View {
         workouts = await workoutsA
         appleDays = await appleDaysA
         // Mi Band (Mi Fitness import) — distinct days across its representative metric keys.
-        let xSteps = await xStepsA
-        let xSleep = await xSleepA
+        let xiaomiSeries = await xiaomiSeriesA
+        let xSteps = xiaomiSeries["steps"] ?? []
+        let xSleep = xiaomiSeries["sleep_total_min"] ?? []
         xiaomiDays = Set(xSteps.map(\.day) + xSleep.map(\.day)).count
         latestRenphoScaleReading = await renphoScaleReadingA
         // Your cards (#582 / Design Reset): latest Stress / Fitness age / Vitality for the pinned home
         // cards. Same merged exploreSeries reads their detail screens use; nil simply hides that card.
-        stressToday = (await stressSeriesA).last?.value
-        fitnessAgeToday = (await fitnessAgeSeriesA).last?.value
-        vitalityToday = (await vitalitySeriesA).last?.value
+        stressToday = whoopExploreSeries["stress"]?.last?.value
+        fitnessAgeToday = whoopExploreSeries["fitness_age"]?.last?.value
+        vitalityToday = whoopExploreSeries["vitality"]?.last?.value
+        let appleComparisonSeries = await appleComparisonSeriesA
         sourceComparisons = buildSourceComparisons(
             whoopRhr: await whoopRhrA,
             whoopHrv: await whoopHrvA,
             whoopSleep: await whoopSleepA,
             whoopRest: await whoopRestA,
-            appleRhr: await appleRhrA,
-            appleHrv: await appleHrvA,
-            appleSleep: await appleSleepA,
-            appleRest: await appleRestA)
+            appleRhr: appleComparisonSeries["resting_hr"] ?? [],
+            appleHrv: appleComparisonSeries["hrv"] ?? [],
+            appleSleep: appleComparisonSeries["asleep_min"] ?? [],
+            appleRest: appleComparisonSeries["sleep_performance"] ?? [])
         // Hydration card (opt-in): today's stored total + the sex/Effort goal. Only loaded when the
         // feature is on, so a disabled feature does zero work and the card stays hidden.
         if hydrationEnabled {
@@ -2928,8 +2949,7 @@ struct TodayView: View {
     /// already handles 0/1 points (empty / a single head dot), so no fallback is needed for layout.
     /// `latestString` reads `.last` of this windowed series, so a value older than the window shows
     /// "—" rather than a stale number under a Today tile (#49).
-    private func sparkValues(_ key: String, source: String, window: Int) async -> [Double] {
-        let all = await repo.series(key: key, source: source)   // full history, asc
+    private func sparkValues(from all: [(day: String, value: Double)], window: Int) -> [Double] {
         guard !all.isEmpty else { return [] }
         return trailingWindow(all, days: window).map { $0.value }
     }
@@ -2987,14 +3007,11 @@ struct TodayView: View {
     }
 
     private var dateLine: String {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "EEEE, d MMMM"
         // The selected day's date when navigated; today's banked-row date (or today) at offset 0.
         if selectedDayOffset == 0, let day = repo.today?.day, let date = Self.dayParser.date(from: day) {
-            return f.string(from: date)
+            return Self.dateLineFormatter.string(from: date)
         }
-        return f.string(from: selectedLogicalDay)
+        return Self.dateLineFormatter.string(from: selectedLogicalDay)
     }
 
     /// Hero title that names the selected day — "Today's"/"Yesterday's"/"Day's" Synthesis.
@@ -3012,10 +3029,7 @@ struct TodayView: View {
         case 0:  return "Today"
         case 1:  return "Yesterday"
         default:
-            let f = DateFormatter()
-            f.locale = Locale(identifier: "en_US_POSIX")
-            f.dateFormat = "EEE d MMM"
-            return f.string(from: selectedLogicalDay)
+            return Self.selectedDayOverlineFormatter.string(from: selectedLogicalDay)
         }
     }
 
@@ -3125,11 +3139,8 @@ struct TodayView: View {
     /// segment was dropped: the StatTile caption is lineLimit(1) and date + range + bpm clips —
     /// avg HR remains on the Workouts screen.
     private func workoutCaption(_ w: WorkoutRow) -> String {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "d MMM"
         let start = Date(timeIntervalSince1970: TimeInterval(w.startTs))
-        let date = f.string(from: start)
+        let date = Self.workoutDateFormatter.string(from: start)
         guard w.endTs > w.startTs else { return "\(date) · \(Self.hrTimeFmt.string(from: start))" }
         let end = Date(timeIntervalSince1970: TimeInterval(w.endTs))
         return "\(date) · \(Self.hrTimeFmt.string(from: start))–\(Self.hrTimeFmt.string(from: end))"
@@ -3137,10 +3148,7 @@ struct TodayView: View {
 
     /// Thousands-grouped integer string (steps / calories).
     private func intString(_ v: Double) -> String {
-        let f = NumberFormatter()
-        f.numberStyle = .decimal
-        f.maximumFractionDigits = 0
-        return f.string(from: NSNumber(value: v)) ?? "\(Int(v.rounded()))"
+        Self.integerFormatter.string(from: NSNumber(value: v)) ?? "\(Int(v.rounded()))"
     }
 
     // MARK: - Date parsing (yyyy-MM-dd, en_US_POSIX, LOCAL zone)

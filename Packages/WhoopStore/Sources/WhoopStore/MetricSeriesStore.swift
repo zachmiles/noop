@@ -60,6 +60,35 @@ extension WhoopStore {
         }
     }
 
+    /// Points for several keys in one indexed read, grouped by key with each series oldest day first.
+    /// This is the bulk counterpart to `metricSeries(deviceId:key:from:to:)` for chart-heavy screens that
+    /// need many Apple Health / Explore series at once. It avoids one actor hop and one SQLite query per key.
+    public func metricSeries(deviceId: String, keys: [String], from: String, to: String) async throws -> [String: [MetricPoint]] {
+        let orderedKeys = Array(Set(keys)).sorted()
+        guard !orderedKeys.isEmpty else { return [:] }
+
+        return try syncRead { db in
+            let placeholders = orderedKeys.map { _ in "?" }.joined(separator: ",")
+            var arguments: [String] = [deviceId]
+            arguments.append(contentsOf: orderedKeys)
+            arguments.append(contentsOf: [from, to])
+
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT day, key, value FROM metricSeries
+                WHERE deviceId = ? AND key IN (\(placeholders)) AND day >= ? AND day <= ?
+                ORDER BY key ASC, day ASC
+                """, arguments: StatementArguments(arguments))
+
+            var grouped: [String: [MetricPoint]] = [:]
+            grouped.reserveCapacity(orderedKeys.count)
+            for row in rows {
+                let point = MetricPoint(day: row["day"], key: row["key"], value: row["value"])
+                grouped[point.key, default: []].append(point)
+            }
+            return grouped
+        }
+    }
+
     /// Distinct metric keys present for a device, sorted ascending.
     public func metricKeys(deviceId: String) async throws -> [String] {
         try syncRead { db in

@@ -8,7 +8,7 @@ import StrandDesign   // TrendPoint — the shared chart point type the Deep Tim
 /// Per-day sleep figures the WHOOP export carried verbatim (metricSeries rows written by
 /// WhoopImporter under the imported deviceId). SleepView prefers these over its on-device
 /// APPROXIMATE recomputations.
-struct ImportedSleepFigures: Equatable {
+struct ImportedSleepFigures: Equatable, Sendable {
     var performancePct: Double?   // "sleep_performance", 0–100
     var consistencyPct: Double?   // "sleep_consistency", 0–100
     var needMin: Double?          // "sleep_need_min", minutes
@@ -61,7 +61,7 @@ struct MetricSeriesResolution: Equatable, Sendable {
 
 /// Source provenance for daily rows before product surfaces merge them. The UI uses this to say
 /// where a vital came from without changing the stored data.
-enum DailyMetricSource: Equatable {
+enum DailyMetricSource: Equatable, Sendable {
     case whoopImport
     case noopComputed
     case appleHealth
@@ -77,7 +77,7 @@ enum DailyMetricSource: Equatable {
     }
 }
 
-struct SourcedDailyMetric: Equatable {
+struct SourcedDailyMetric: Equatable, Sendable {
     let metric: DailyMetric
     let source: DailyMetricSource
 }
@@ -276,12 +276,10 @@ final class Repository: ObservableObject {
         do { try await store.checkpointWAL(); return true } catch { return false }
     }
 
-    /// One refresh's fully-merged dashboard caches, computed OFF the main actor (FIX 3) and applied to the
-    /// `@Published` props in a single main-actor batch. Every member is an `Equatable` value type. NOT
-    /// marked `Sendable` (its `DailyMetric`/`CachedSleepSession` members aren't formally `Sendable`); it
-    /// crosses the `Task.detached` boundary the same way the engine's `DayResult` already does under this
-    /// project's `minimal` strict-concurrency setting (SWIFT_STRICT_CONCURRENCY: minimal, Swift 5 mode).
-    private struct MergedCaches {
+    /// One refresh's fully-merged dashboard caches, computed off the main actor and applied to the
+    /// `@Published` props in a single main-actor batch. The stored DTOs are immutable `Sendable` values,
+    /// so the detached merge can return this snapshot without relying on minimal-concurrency loopholes.
+    private struct MergedCaches: Sendable {
         let importedSleep: [String: ImportedSleepFigures]
         let days: [DailyMetric]
         let sleeps: [CachedSleepSession]
@@ -799,6 +797,19 @@ final class Repository: ObservableObject {
         return pts.map { ($0.day, $0.value) }
     }
 
+    /// Daily series for several metric keys from one source in a single indexed store read.
+    /// Chart-heavy screens use this to avoid one actor hop + SQLite query per metric.
+    func series(keys: [String], source: String, days: Int = 4000) async -> [String: [(day: String, value: Double)]] {
+        guard let store = await ensureStore(), !keys.isEmpty else { return [:] }
+        let now = Date()
+        let from = Self.dayString(now.addingTimeInterval(-Double(days) * 86_400))
+        let to = Self.dayString(now.addingTimeInterval(86_400))
+        let grouped = (try? await store.metricSeries(deviceId: source, keys: keys, from: from, to: to)) ?? [:]
+        return grouped.mapValues { points in
+            points.map { ($0.day, $0.value) }
+        }
+    }
+
     func latestRenphoScaleReading(days: Int = 4000) async -> RenphoScaleReadingSnapshot? {
         guard let store = await ensureStore() else { return nil }
         let now = Date()
@@ -815,13 +826,13 @@ final class Repository: ObservableObject {
             "body_water", "skeletal_muscle", "muscle_mass",
             "bone_mass", "protein", "bmr",
         ]
+        let grouped = (try? await store.metricSeries(deviceId: Self.renphoScaleSource,
+                                                     keys: keys.filter { $0 != "weight" },
+                                                     from: latest.day,
+                                                     to: latest.day)) ?? [:]
         var metrics: [String: Double] = ["weight": latest.value]
         for key in keys where key != "weight" {
-            let pts = (try? await store.metricSeries(deviceId: Self.renphoScaleSource,
-                                                     key: key,
-                                                     from: latest.day,
-                                                     to: latest.day)) ?? []
-            if let point = pts.last { metrics[key] = point.value }
+            if let point = grouped[key]?.last { metrics[key] = point.value }
         }
 
         return RenphoScaleReadingSnapshot(day: latest.day,
@@ -844,10 +855,10 @@ final class Repository: ObservableObject {
         guard let store = await ensureStore() else { return appleProjectionStatus }
         let now = Date()
         let to = Self.dayString(now.addingTimeInterval(86_400))
-        let rows = ((try? await store.dailyMetrics(deviceId: Self.appleHealthSource,
-                                                   from: "1900-01-01", to: to)) ?? [])
-            .sorted { $0.day < $1.day }
-        guard !rows.isEmpty else {
+        let total = (try? await store.dailyMetricCount(deviceId: Self.appleHealthSource,
+                                                       from: "1900-01-01",
+                                                       to: to)) ?? 0
+        guard total > 0 else {
             let status = AppleHealthProjectionStatus(processed: 0, total: 0, cursorDay: nil, isComplete: true)
             appleProjectionStatus = status
             UserDefaults.standard.set(true, forKey: Self.appleProjectionCompletedDefaultsKey)
@@ -855,19 +866,26 @@ final class Repository: ObservableObject {
         }
 
         let cursor = UserDefaults.standard.string(forKey: Self.appleProjectionCursorDefaultsKey)
-        let pending = rows.filter { row in
-            guard let cursor else { return true }
-            return row.day > cursor
+        let processedBeforeBatch: Int
+        if let cursor {
+            processedBeforeBatch = (try? await store.dailyMetricCount(deviceId: Self.appleHealthSource,
+                                                                      from: "1900-01-01",
+                                                                      to: cursor)) ?? 0
+        } else {
+            processedBeforeBatch = 0
         }
-        guard !pending.isEmpty else {
-            let status = AppleHealthProjectionStatus(processed: rows.count, total: rows.count,
-                                                     cursorDay: rows.last?.day, isComplete: true)
+        let batch = (try? await store.dailyMetricsAfter(deviceId: Self.appleHealthSource,
+                                                        after: cursor,
+                                                        to: to,
+                                                        limit: max(1, batchSize))) ?? []
+        guard !batch.isEmpty else {
+            let status = AppleHealthProjectionStatus(processed: total, total: total,
+                                                     cursorDay: cursor, isComplete: true)
             appleProjectionStatus = status
             UserDefaults.standard.set(true, forKey: Self.appleProjectionCompletedDefaultsKey)
             return status
         }
 
-        let batch = Array(pending.prefix(max(1, batchSize)))
         let points = Self.appleProjectionPoints(from: batch)
         if !points.isEmpty {
             try? await store.upsertMetricSeries(points, deviceId: Self.appleHealthSource)
@@ -876,10 +894,10 @@ final class Repository: ObservableObject {
         if let newCursor {
             UserDefaults.standard.set(newCursor, forKey: Self.appleProjectionCursorDefaultsKey)
         }
-        let processed = rows.count - pending.count + batch.count
-        let isComplete = processed >= rows.count
+        let processed = min(total, processedBeforeBatch + batch.count)
+        let isComplete = processed >= total
         UserDefaults.standard.set(isComplete, forKey: Self.appleProjectionCompletedDefaultsKey)
-        let status = AppleHealthProjectionStatus(processed: processed, total: rows.count,
+        let status = AppleHealthProjectionStatus(processed: processed, total: total,
                                                  cursorDay: newCursor, isComplete: isComplete)
         appleProjectionStatus = status
         return status
@@ -1233,6 +1251,39 @@ final class Repository: ObservableObject {
         for p in importedPts { byDay[p.day] = p.value }
 
         return byDay.sorted { $0.key < $1.key }.map { (day: $0.key, value: $0.value) }
+    }
+
+    /// Bulk Explore read path for screens that need several keys from the same source at once.
+    /// Mirrors `exploreSeries(key:source:)` precedence per key while collapsing same-source
+    /// metricSeries reads into indexed bulk queries.
+    func exploreSeries(keys: [String], source: String, days: Int = 4000) async -> [String: [(day: String, value: Double)]] {
+        let orderedKeys = Array(Set(keys)).sorted()
+        guard !orderedKeys.isEmpty else { return [:] }
+        guard source == "my-whoop" else { return await series(keys: orderedKeys, source: source, days: days) }
+        guard let store = await ensureStore() else { return [:] }
+        let now = Date()
+        let from = Self.dayString(now.addingTimeInterval(-Double(days) * 86_400))
+        let to = Self.dayString(now.addingTimeInterval(86_400))
+
+        let computed = (try? await store.metricSeries(deviceId: computedDeviceId, keys: orderedKeys, from: from, to: to)) ?? [:]
+        let imported = (try? await store.metricSeries(deviceId: deviceId, keys: orderedKeys, from: from, to: to)) ?? [:]
+
+        var output: [String: [(day: String, value: Double)]] = [:]
+        output.reserveCapacity(orderedKeys.count)
+        for key in orderedKeys {
+            var byDay: [String: Double] = [:]
+            for d in self.days where byDay[d.day] == nil {
+                if let v = Self.dailyColumn(key: key, day: d) { byDay[d.day] = v }
+            }
+            for p in computed[key] ?? [] {
+                byDay[p.day] = p.value
+            }
+            for p in imported[key] ?? [] {
+                byDay[p.day] = p.value
+            }
+            output[key] = byDay.sorted { $0.key < $1.key }.map { (day: $0.key, value: $0.value) }
+        }
+        return output
     }
 
     /// The merged DailyMetric column backing an Explore metric key, for the days the imported/computed
@@ -1639,6 +1690,16 @@ final class Repository: ObservableObject {
             deviceId: "apple-health",
             from: Self.dayString(now.addingTimeInterval(-Double(days) * 86_400)),
             to: Self.dayString(now.addingTimeInterval(86_400)))) ?? []
+    }
+
+    /// Apple Health workout count for the same history window AppleHealthView displays.
+    /// Avoids loading/reconciling every workout source when that screen only needs the Apple count tile.
+    func appleHealthWorkoutCount(days: Int = 4000) async -> Int {
+        guard let store = await ensureStore() else { return 0 }
+        let now = Int(Date().timeIntervalSince1970)
+        let lo = now - days * 86_400
+        let hi = now + 86_400
+        return ((try? await store.workouts(deviceId: Self.appleHealthSource, from: lo, to: hi, limit: 10_000)) ?? []).count
     }
 
     /// Shared formatter — created once. Hot read path (called per series window / refresh);

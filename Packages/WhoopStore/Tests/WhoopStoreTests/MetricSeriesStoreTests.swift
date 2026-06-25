@@ -65,6 +65,33 @@ final class MetricSeriesStoreTests: XCTestCase {
         XCTAssertEqual(rec[0], MetricPoint(day: "2026-05-10", key: "recovery", value: 72))
     }
 
+    func testBulkReadGroupsRequestedKeysInDayOrder() async throws {
+        let store = try await WhoopStore.inMemory()
+        try await store.upsertMetricSeries([
+            MetricPoint(day: "2026-05-20", key: "restingHr", value: 54),
+            MetricPoint(day: "2026-05-01", key: "steps", value: 7_200),
+            MetricPoint(day: "2026-05-10", key: "steps", value: 8_100),
+            MetricPoint(day: "2026-05-10", key: "recovery", value: 72),
+            MetricPoint(day: "2026-06-01", key: "steps", value: 9_300),
+        ], deviceId: "devA")
+        try await store.upsertMetricSeries([
+            MetricPoint(day: "2026-05-10", key: "steps", value: 99_999),
+        ], deviceId: "devB")
+
+        let grouped = try await store.metricSeries(
+            deviceId: "devA",
+            keys: ["steps", "restingHr", "steps"],
+            from: "2026-05-01",
+            to: "2026-05-31")
+
+        XCTAssertEqual(Set(grouped.keys), ["restingHr", "steps"])
+        XCTAssertEqual(grouped["steps"]?.map(\.day), ["2026-05-01", "2026-05-10"])
+        XCTAssertEqual(grouped["steps"]?.map(\.value), [7_200, 8_100])
+        XCTAssertEqual(grouped["restingHr"], [
+            MetricPoint(day: "2026-05-20", key: "restingHr", value: 54),
+        ])
+    }
+
     // MARK: - idempotency + conflict-update
 
     func testIdempotencyAndConflictUpdate() async throws {

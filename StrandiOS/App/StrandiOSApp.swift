@@ -136,7 +136,7 @@ struct StrandiOSApp: App {
                 model.applySmartAlarm()
                 Task {
                     health.refreshAuthIfPreviouslyGranted()
-                    await health.sync()
+                    await health.sync(deferScaleWriteBack: true)
                     await WidgetSnapshot.publish(from: model)
                     // Push the wrist on the SAME refresh as the Home-screen widget so the watch, the
                     // widget and Today never disagree about which day they describe. Without this the

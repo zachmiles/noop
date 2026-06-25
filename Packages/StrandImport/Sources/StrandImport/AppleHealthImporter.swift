@@ -238,6 +238,40 @@ public struct AppleHealthImporter {
 
 // MARK: - SAX delegate
 
+private enum SampleDedupeKey {
+    static func fingerprint(type: String, start: Date, end: Date, sourceName: String?, valueToken: String) -> UInt64 {
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        mix(type, into: &hash)
+        mix(millis(start), into: &hash)
+        mix(millis(end), into: &hash)
+        mix(sourceName ?? "", into: &hash)
+        mix(valueToken, into: &hash)
+        return hash
+    }
+
+    private static func millis(_ date: Date) -> Int64 {
+        Int64((date.timeIntervalSince1970 * 1_000).rounded())
+    }
+
+    private static func mix(_ string: String, into hash: inout UInt64) {
+        for byte in string.utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 1_099_511_628_211
+        }
+        hash ^= 0xff
+        hash &*= 1_099_511_628_211
+    }
+
+    private static func mix(_ value: Int64, into hash: inout UInt64) {
+        var bits = UInt64(bitPattern: value)
+        for _ in 0..<8 {
+            hash ^= bits & 0xff
+            hash &*= 1_099_511_628_211
+            bits >>= 8
+        }
+    }
+}
+
 final class HealthXMLDelegate: NSObject, XMLParserDelegate {
 
     /// When `false`, parsed samples are folded into `dailyAcc` and then dropped
@@ -288,8 +322,9 @@ final class HealthXMLDelegate: NSObject, XMLParserDelegate {
     // Correlation are skipped (they also appear top-level).
     private var correlationDepth = 0
 
-    // Dedupe set over HealthSample dedupeKeys.
-    private var seenSampleKeys: Set<String> = []
+    // Dedupe set over HealthSample's logical identity. A 64-bit fingerprint avoids retaining
+    // per-record strings or structs in multi-million-row exports.
+    private var seenSampleKeys: Set<UInt64> = []
     private var latestHeightAt: Date?
     private var latestWeightAt: Date?
 
@@ -513,19 +548,26 @@ final class HealthXMLDelegate: NSObject, XMLParserDelegate {
         tzOffsetMin: Int,
         sourceName: String?
     ) {
-        let sample = HealthSample(
-            type: type,
-            value: value,
-            valueString: valueString,
-            unit: unit,
-            start: start,
-            end: end,
-            tzOffsetMin: tzOffsetMin,
-            sourceName: sourceName
-        )
         // Dedupe on type+start+end+source+value (correctness-critical; the
         // dedupe set is the smaller, retained cost).
-        if seenSampleKeys.insert(sample.dedupeKey).inserted {
+        let key = SampleDedupeKey.fingerprint(
+            type: type,
+            start: start,
+            end: end,
+            sourceName: sourceName,
+            valueToken: valueString ?? value.map { String($0) } ?? ""
+        )
+        if seenSampleKeys.insert(key).inserted {
+            let sample = HealthSample(
+                type: type,
+                value: value,
+                valueString: valueString,
+                unit: unit,
+                start: start,
+                end: end,
+                tzOffsetMin: tzOffsetMin,
+                sourceName: sourceName
+            )
             // Always fold into the bounded per-day accumulator.
             dailyAcc.add(sample)
             anyRecordSeen = true

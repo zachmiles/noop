@@ -562,62 +562,76 @@ final class InsightsHubViewModel: ObservableObject {
     // MARK: Load
 
     func load(repo: Repository) async {
-        // Journal → behaviour → days (only "yes" answers count as the behaviour occurring).
-        let entries = await repo.journalEntries()
-        var byBehaviour: [String: Set<String>] = [:]
-        for e in entries where e.answeredYes {
-            byBehaviour[e.question, default: []].insert(e.day)
-        }
+        let outcomeKeys = self.outcomeKeys
+        let doseKeys = DosedBehavior.allCases.map { Self.doseKey(for: $0) }
+        async let entriesA = repo.journalEntries()
+        async let outcomeSeriesA = repo.series(keys: outcomeKeys, source: "my-whoop")
+        async let doseSeriesA = repo.series(keys: doseKeys, source: Self.doseSource)
 
-        // Outcome series: imported metricSeries ∪ the DailyMetric column fallback so an
-        // account-free (strap-only) user still gets effects — the exact contract InsightsView uses.
+        // Daily metrics for the strap-only outcome fallback. The view-model is MainActor-isolated,
+        // so reading the repository's published cache happens on the correct actor before shaping.
         let mergedDays = repo.days
-        var byKey: [String: [String: Double]] = [:]
-        for key in outcomeKeys {
-            let s = await repo.series(key: key, source: "my-whoop")
-            var dict: [String: Double] = [:]
-            for row in s { dict[row.day] = row.value }
-            for d in mergedDays where dict[d.day] == nil {
-                if let v = Self.dailyOutcome(key: key, day: d) { dict[d.day] = v }
+        let entries = await entriesA
+        let outcomeSeries = await outcomeSeriesA
+        let doseSeries = await doseSeriesA
+
+        let shaped = await Task.detached(priority: .userInitiated) {
+            // Journal → behaviour → days (only "yes" answers count as the behaviour occurring).
+            var byBehaviour: [String: Set<String>] = [:]
+            for entry in entries where entry.answeredYes {
+                byBehaviour[entry.question, default: []].insert(entry.day)
             }
-            byKey[key] = dict
-        }
 
-        // Dose rows per dosed behaviour, under the dedicated dose source, keyed by the
-        // behaviour's storage key. A logged "yes" with no dose row reads as dose = 1
-        // (back-compatible), so we union the behaviour's logged days at dose 1 with any
-        // explicit dose rows (explicit wins).
-        var doseByBehaviour: [DosedBehavior: [String: Int]] = [:]
-        for behavior in DosedBehavior.allCases {
-            let key = Self.doseKey(for: behavior)
-            let rows = await repo.series(key: key, source: Self.doseSource)
-            var doses: [String: Int] = [:]
-            // Back-compat: any logged "yes" day for a matching journal question starts at dose 1.
-            for (question, days) in byBehaviour where Self.matches(behavior, question: question) {
-                for day in days { doses[day] = max(doses[day] ?? 0, 1) }
+            // Outcome series: imported metricSeries ∪ the DailyMetric column fallback so an
+            // account-free (strap-only) user still gets effects — the exact contract InsightsView uses.
+            var byKey: [String: [String: Double]] = [:]
+            byKey.reserveCapacity(outcomeKeys.count)
+            for key in outcomeKeys {
+                let series = outcomeSeries[key] ?? []
+                var dict: [String: Double] = [:]
+                dict.reserveCapacity(series.count + mergedDays.count)
+                for row in series { dict[row.day] = row.value }
+                for day in mergedDays where dict[day.day] == nil {
+                    if let value = Self.dailyOutcome(key: key, day: day) { dict[day.day] = value }
+                }
+                byKey[key] = dict
             }
-            // Explicit dose rows override.
-            for row in rows { doses[row.day] = Int(row.value.rounded()) }
-            if !doses.isEmpty { doseByBehaviour[behavior] = doses }
-        }
 
-        // Build the dose cards from the engine (alcohol first, then caffeine).
-        var cards: [DoseCard] = []
-        for behavior in DosedBehavior.allCases {
-            guard let doses = doseByBehaviour[behavior] else { continue }
-            let outcomeName = DoseResponsePriors.defaultOutcome(for: behavior)
-            let outcomeKey = Self.outcomeKey(forEngineName: outcomeName)
-            let outcomeDays = byKey[outcomeKey] ?? [:]
-            guard let response = DoseResponseEngine.estimate(behavior: behavior,
-                                                             doseByDay: doses,
-                                                             outcomeByDay: outcomeDays) else { continue }
-            let latest = outcomeDays.keys.max().flatMap { outcomeDays[$0] }
-            cards.append(DoseCard(behavior: behavior, response: response, latestOutcome: latest))
-        }
+            // Dose rows per dosed behaviour, under the dedicated dose source, keyed by the
+            // behaviour's storage key. A logged "yes" with no dose row reads as dose = 1
+            // (back-compatible), so we union the behaviour's logged days at dose 1 with any
+            // explicit dose rows (explicit wins).
+            var doseByBehaviour: [DosedBehavior: [String: Int]] = [:]
+            for behavior in DosedBehavior.allCases {
+                let key = Self.doseKey(for: behavior)
+                let rows = doseSeries[key] ?? []
+                var doses: [String: Int] = [:]
+                for (question, days) in byBehaviour where Self.matches(behavior, question: question) {
+                    for day in days { doses[day] = max(doses[day] ?? 0, 1) }
+                }
+                for row in rows { doses[row.day] = Int(row.value.rounded()) }
+                if !doses.isEmpty { doseByBehaviour[behavior] = doses }
+            }
 
-        self.behaviours = byBehaviour
-        self.outcomeByKey = byKey
-        self.doseCards = cards
+            // Build the dose cards from the engine (alcohol first, then caffeine).
+            var cards: [DoseCard] = []
+            for behavior in DosedBehavior.allCases {
+                guard let doses = doseByBehaviour[behavior] else { continue }
+                let outcomeName = DoseResponsePriors.defaultOutcome(for: behavior)
+                let outcomeKey = Self.outcomeKey(forEngineName: outcomeName)
+                let outcomeDays = byKey[outcomeKey] ?? [:]
+                guard let response = DoseResponseEngine.estimate(behavior: behavior,
+                                                                 doseByDay: doses,
+                                                                 outcomeByDay: outcomeDays) else { continue }
+                let latest = outcomeDays.keys.max().flatMap { outcomeDays[$0] }
+                cards.append(DoseCard(behavior: behavior, response: response, latestOutcome: latest))
+            }
+            return (byBehaviour: byBehaviour, byKey: byKey, cards: cards)
+        }.value
+
+        self.behaviours = shaped.byBehaviour
+        self.outcomeByKey = shaped.byKey
+        self.doseCards = shaped.cards
         self.loaded = true
         rankFor(currentOutcome)
     }
@@ -635,7 +649,7 @@ final class InsightsHubViewModel: ObservableObject {
 
     /// The merged DailyMetric column backing an outcome key (strap-only fallback). sleep_performance
     /// has no daily column, so it stays import-only — never seeded here (matches InsightsView).
-    private static func dailyOutcome(key: String, day d: DailyMetric) -> Double? {
+    private nonisolated static func dailyOutcome(key: String, day d: DailyMetric) -> Double? {
         switch key {
         case "recovery": return d.recovery
         case "hrv":      return d.avgHrv
@@ -645,7 +659,7 @@ final class InsightsHubViewModel: ObservableObject {
     }
 
     /// The metricSeries key a DoseResponsePriors outcome NAME maps to ("Charge"→recovery, "HRV"→hrv).
-    static func outcomeKey(forEngineName name: String) -> String {
+    nonisolated static func outcomeKey(forEngineName name: String) -> String {
         switch name {
         case "Charge": return "recovery"
         case "HRV":    return "hrv"
@@ -656,10 +670,10 @@ final class InsightsHubViewModel: ObservableObject {
     }
 
     /// The dose storage key for a behaviour (its raw enum value — the stable, cross-platform key).
-    static func doseKey(for behavior: DosedBehavior) -> String { "dose_\(behavior.rawValue)" }
+    nonisolated static func doseKey(for behavior: DosedBehavior) -> String { "dose_\(behavior.rawValue)" }
 
     /// Whether a journal question is the dosed behaviour (so its yes-days back-fill dose = 1).
-    static func matches(_ behavior: DosedBehavior, question: String) -> Bool {
+    nonisolated static func matches(_ behavior: DosedBehavior, question: String) -> Bool {
         let q = question.lowercased()
         switch behavior {
         case .alcohol:  return q.contains("alcohol") || q.contains("drink")
@@ -669,7 +683,7 @@ final class InsightsHubViewModel: ObservableObject {
 
     // MARK: Dose card view-data
 
-    struct DoseCard: Identifiable {
+    struct DoseCard: Identifiable, Sendable {
         let behavior: DosedBehavior
         let response: DoseResponse
         /// The user's most recent outcome value (for the evening damage forecast anchor).

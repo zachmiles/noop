@@ -11,7 +11,7 @@ import GRDB
 /// One cached sleep session pulled from the server's /v1/sleep. Natural key (deviceId, startTs).
 /// `stagesJSON` is the verbatim JSON array of stage segments ([{start,end,stage}]) — stored as a
 /// string so the cache stays schema-agnostic about the staging shape.
-public struct CachedSleepSession: Equatable, Codable {
+public struct CachedSleepSession: Equatable, Codable, Sendable {
     public let startTs: Int          // unix seconds
     public let endTs: Int            // unix seconds
     public let efficiency: Double?
@@ -40,7 +40,7 @@ public struct CachedSleepSession: Equatable, Codable {
 }
 
 /// One cached daily-metrics row pulled from the server's /v1/daily. Natural key (deviceId, day).
-public struct DailyMetric: Equatable, Codable {
+public struct DailyMetric: Equatable, Codable, Sendable {
     public let day: String           // YYYY-MM-DD
     public let totalSleepMin: Double?
     public let efficiency: Double?
@@ -368,6 +368,52 @@ extension WhoopStore {
                                 respRateBpm: $0["respRateBpm"],
                                 steps: $0["steps"], activeKcalEst: $0["activeKcalEst"])
                 }
+        }
+    }
+
+    /// Count cached daily metrics for a source over a day-key range.
+    public func dailyMetricCount(deviceId: String, from: String, to: String) async throws -> Int {
+        try syncRead { db in
+            try Int.fetchOne(db, sql: """
+                SELECT COUNT(*) FROM dailyMetric
+                WHERE deviceId = ? AND day >= ? AND day <= ?
+                """, arguments: [deviceId, from, to]) ?? 0
+        }
+    }
+
+    /// Next cached daily metrics after `afterDay`, bounded by `to`, oldest first.
+    public func dailyMetricsAfter(deviceId: String, after afterDay: String?, to: String, limit: Int) async throws -> [DailyMetric] {
+        let cappedLimit = max(1, limit)
+        return try syncRead { db in
+            let rows: [Row]
+            if let afterDay {
+                rows = try Row.fetchAll(db, sql: """
+                    SELECT day, totalSleepMin, efficiency, deepMin, remMin, lightMin, disturbances,
+                           restingHr, avgHrv, recovery, strain, exerciseCount,
+                           spo2Pct, skinTempDevC, respRateBpm, steps, activeKcalEst FROM dailyMetric
+                    WHERE deviceId = ? AND day > ? AND day <= ?
+                    ORDER BY day ASC LIMIT ?
+                    """, arguments: [deviceId, afterDay, to, cappedLimit])
+            } else {
+                rows = try Row.fetchAll(db, sql: """
+                    SELECT day, totalSleepMin, efficiency, deepMin, remMin, lightMin, disturbances,
+                           restingHr, avgHrv, recovery, strain, exerciseCount,
+                           spo2Pct, skinTempDevC, respRateBpm, steps, activeKcalEst FROM dailyMetric
+                    WHERE deviceId = ? AND day >= ? AND day <= ?
+                    ORDER BY day ASC LIMIT ?
+                    """, arguments: [deviceId, "1900-01-01", to, cappedLimit])
+            }
+            return rows.map {
+                DailyMetric(day: $0["day"], totalSleepMin: $0["totalSleepMin"],
+                            efficiency: $0["efficiency"], deepMin: $0["deepMin"],
+                            remMin: $0["remMin"], lightMin: $0["lightMin"],
+                            disturbances: $0["disturbances"], restingHr: $0["restingHr"],
+                            avgHrv: $0["avgHrv"], recovery: $0["recovery"],
+                            strain: $0["strain"], exerciseCount: $0["exerciseCount"],
+                            spo2Pct: $0["spo2Pct"], skinTempDevC: $0["skinTempDevC"],
+                            respRateBpm: $0["respRateBpm"],
+                            steps: $0["steps"], activeKcalEst: $0["activeKcalEst"])
+            }
         }
     }
 }

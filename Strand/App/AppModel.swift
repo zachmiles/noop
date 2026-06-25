@@ -37,6 +37,13 @@ final class AppModel: ObservableObject {
     /// init(); `weak` so an intent fired while NOOP is closed sees nil and asks the user to open it. (#42)
     static weak var shared: AppModel?
 
+    /// First-paint cache window. Deep all-history screens read their own store-backed series; the root
+    /// dashboard only needs recent history during launch, and loading thousands of days here can starve
+    /// SwiftUI before the first touch lands on device.
+    static let launchRefreshDays = 120
+    private static let launchMaintenanceDelayNs: UInt64 = 300_000_000_000
+    private static let launchProjectionDelayNs: UInt64 = 45_000_000_000
+
     /// Timestamp formatter for the generic-HR strap-log lines routed through `straplog` into the shared
     /// log (issue #421). Mirrors `BLEManager.logTimeFormatter`'s `HH:mm:ss` so WHOOP and HR-strap lines
     /// read identically in the exported strap log.
@@ -295,10 +302,9 @@ final class AppModel: ObservableObject {
         // actor; no-op on macOS for the Inbox part.
         Task.detached { AppModel.purgeImportInbox(); AppModel.purgeImportTemp() }
 
-        // FIX 2(b): the launch sequence runs at `.utility` so its heavy one-shot 4000-day heal/rescore
-        // yields to UI rendering instead of contending at the inherited user-initiated QoS. The reads are
-        // already off the main actor (analyzeRecent — FIX 1), and at `.utility` the scheduler keeps the
-        // main thread free for SwiftUI during the deep-history pass right after an import / first launch.
+        // Launch must make the UI touchable before it starts deep maintenance. The one-shot heal/rescore
+        // passes can scan years of raw history; even with off-actor reads, their main-actor orchestration
+        // should never compete with first paint or scene transitions.
         Task(priority: .utility) { [weak self] in
             guard let self else { return }
             #if DEBUG
@@ -312,10 +318,16 @@ final class AppModel: ObservableObject {
                 self.live.batteryPct = 68
             }
             #endif
-            await self.repo.refresh()                          // surface any imported data at once
-            self.startAppleHealthProjection()
+            if !self.repo.loaded {
+                self.diagnosticLog("Launch: recent dashboard refresh starting")
+                await self.repo.refresh(days: Self.launchRefreshDays)
+                self.diagnosticLog("Launch: recent dashboard refresh finished")
+            } else {
+                self.diagnosticLog("Launch: recent dashboard cache already loaded")
+            }
+            self.startAppleHealthProjection(after: Self.launchProjectionDelayNs)
             await self.wireSourceCoordinator()                 // dormant unless a generic strap is active
-            try? await Task.sleep(nanoseconds: 6_000_000_000)  // give the first offload a moment
+            try? await Task.sleep(nanoseconds: Self.launchMaintenanceDelayNs)
             // FIX 2(a): DEFER the heavy one-shot 4000-day heal/rescore while an import is in flight. A
             // large Apple Health import is the worst-case launch overlap — running a 4000-iteration heal
             // + rescore concurrently with the import's parse+writes is what produced the ~1-minute app-wide
@@ -1661,12 +1673,16 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func startAppleHealthProjection(reset: Bool = false) {
+    private func startAppleHealthProjection(reset: Bool = false, after delayNs: UInt64 = 0) {
         if reset { repo.resetAppleHealthProjection() }
         guard appleProjectionTask == nil else { return }
         appleProjectionTask = Task(priority: .utility) { @MainActor [weak self] in
             guard let self else { return }
             defer { self.appleProjectionTask = nil }
+            if delayNs > 0 {
+                try? await Task.sleep(nanoseconds: delayNs)
+                guard !Task.isCancelled else { return }
+            }
             self.appleHealthImportProgress = AppleHealthImportProgress(
                 step: "Backfilling Apple Health history",
                 detail: "Preparing daily sleep and health projections…")

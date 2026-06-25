@@ -173,17 +173,28 @@ private struct StaggeredAppear: ViewModifier {
 
     @State private var hasAppeared = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
+
+    private var prefersInstantAppear: Bool {
+        if reduceMotion { return true }
+        #if os(iOS)
+        if horizontalSizeClass == .compact { return true }
+        #endif
+        return false
+    }
 
     func body(content: Content) -> some View {
-        // `shown` is true once we've appeared (or immediately under Reduce Motion / when the
-        // element is asked to appear without animation).
-        let shown = hasAppeared || reduceMotion
+        // `shown` is true once we've appeared (or immediately under Reduce Motion / compact iPhone,
+        // where delayed section reveals can compete with scroll gestures as lazy content enters).
+        let shown = hasAppeared || prefersInstantAppear || !isVisible
         content
-            .opacity(isVisible ? (shown ? 1 : 0) : 1)
-            .offset(y: (isVisible && !shown) ? NoopMotion.riseOffset : 0)
+            .opacity(shown ? 1 : 0)
+            .offset(y: shown ? 0 : NoopMotion.riseOffset)
             .onAppear {
                 guard isVisible, !hasAppeared else { return }
-                if reduceMotion {
+                if prefersInstantAppear {
                     hasAppeared = true                  // no animation, no delay
                 } else {
                     let delay = Double(max(0, index)) * NoopMotion.stagger

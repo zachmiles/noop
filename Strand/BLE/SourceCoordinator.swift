@@ -82,6 +82,7 @@ final class SourceCoordinator: ObservableObject {
     private var activeWhoopId: String?
 
     private var cancellables = Set<AnyCancellable>()
+    private static let renphoStartupDelayNs: UInt64 = 120_000_000_000
     /// Provides the current body profile for the scale's BIA handshake. nil means weight-only.
     private let renphoProfile: () -> RenphoScaleSource.Profile?
     private let renphoReadingSaved: (RenphoScaleSource.Reading) -> Void
@@ -137,6 +138,7 @@ final class SourceCoordinator: ObservableObject {
             .store(in: &cancellables)
 
         registry.$devices
+            .dropFirst()
             .sink { [weak self] _ in self?.reconcileRenphoScaleListener() }
             .store(in: &cancellables)
 
@@ -145,7 +147,11 @@ final class SourceCoordinator: ObservableObject {
             .sink { [weak self] uuid in self?.connectedPeripheralChanged(to: uuid) }
             .store(in: &cancellables)
 
-        reconcileRenphoScaleListener()
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: Self.renphoStartupDelayNs)
+            guard !Task.isCancelled else { return }
+            self?.reconcileRenphoScaleListener()
+        }
     }
 
     // MARK: - Transitions
@@ -374,18 +380,13 @@ final class SourceCoordinator: ObservableObject {
             let renphoReadingSaved = self.renphoReadingSaved
             let source = RenphoScaleSource(
                 profileProvider: renphoProfile,
-                deviceIdForPeripheral: { [weak self, straplog] uuid in
+                deviceIdForPeripheral: { [weak self] uuid in
                     let match = self?.registry.devices.first {
                         $0.sourceKind == .renphoScale
                             && $0.status != .archived
                             && $0.peripheralId == uuid.uuidString
                     }
                     if let match { return match.id }
-                    let known = self?.registry.devices
-                        .filter { $0.sourceKind == .renphoScale && $0.status != .archived }
-                        .map { $0.peripheralId ?? "nil" }
-                        .joined(separator: ", ") ?? "none"
-                    straplog("RENPHO scale: peripheral \(uuid) is not paired; known paired peripherals: \(known)")
                     return nil
                 },
                 persist: { [storeHandle, straplog] _, reading in

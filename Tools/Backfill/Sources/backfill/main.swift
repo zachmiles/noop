@@ -137,7 +137,7 @@ if let whoopExport, FileManager.default.fileExists(atPath: whoopExport.path) {
 // ───── Apple Health ─────
 if !skipAppleHealth, let appleExport, FileManager.default.fileExists(atPath: appleExport.path) {
     print("parsing Apple Health (large — ~90s)…")
-    let res = try ImportCoordinator().importAppleHealth(from: appleExport)
+    let res = try ImportCoordinator().importAppleHealth(from: appleExport, retainRawSamples: false)
     let daily = AppleHealthAggregator.aggregate(res)
     let rows = daily.map { d in AppleDaily(day: d.day, steps: d.steps.map { Int($0) },
         activeKcal: d.activeKcal, basalKcal: d.basalKcal, vo2max: d.vo2max,

@@ -201,17 +201,15 @@ struct AppleHealthView: View {
             } else if !loaded {
                 loadingState
             } else {
-                VStack(alignment: .leading, spacing: NoopMetrics.sectionGap) {
-                    #if os(iOS)
-                    liveSyncCard
-                    #endif
-                    rangeControl
-                    tileGrid
-                    heartSection
-                    activitySection
-                    bodySection
-                    sleepSection
-                }
+                #if os(iOS)
+                liveSyncCard
+                #endif
+                rangeControl
+                tileGrid
+                heartSection
+                activitySection
+                bodySection
+                sleepSection
             }
         }
         .task(id: repo.refreshSeq) { await load() }
@@ -251,20 +249,17 @@ struct AppleHealthView: View {
         }
 
         async let rows = repo.appleDailyRows()
-        async let workouts = repo.workoutRows()
-
-        var fetched: [String: [(day: String, value: Double)]] = [:]
-        for key in Self.seriesKeys {
-            fetched[key] = await repo.series(key: key, source: "apple-health")
-        }
+        async let workouts = repo.appleHealthWorkoutCount()
+        async let fetched = repo.series(keys: Self.seriesKeys, source: "apple-health")
 
         let loadedRows = await rows
-        let appleWorkouts = await workouts.filter { WorkoutSource.isAppleHealth($0.source) }
+        let appleWorkouts = await workouts
+        let fetchedSeries = await fetched
 
         await MainActor.run {
             appleRows = loadedRows.sorted { $0.day < $1.day }
-            workoutCount = appleWorkouts.count
-            series = fetched
+            workoutCount = appleWorkouts
+            series = fetchedSeries
             rebuildWindowCache()
             loaded = true
         }

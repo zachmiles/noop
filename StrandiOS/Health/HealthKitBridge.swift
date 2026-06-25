@@ -38,6 +38,8 @@ final class HealthKitBridge: ObservableObject {
     private let appleDeviceId: String
     /// NOOP's own strap-derived source id, read back when writing into Health.
     private let noopDeviceId: String
+    private var deferredScaleWriteBackTask: Task<Void, Never>?
+    private static let foregroundScaleWriteBackDelayNs: UInt64 = 90_000_000_000
     /// NOOP's on-device COMPUTED daily scores (recovery/HRV/RHR/SpO₂/resp) live under the sibling
     /// `deviceId + "-noop"` id — mirrors `Repository.computedDeviceId` / `IntelligenceEngine.computedId`.
     /// `writeBack` must read this, not the raw import id: a Bluetooth-only WHOOP user has no imported
@@ -333,7 +335,7 @@ final class HealthKitBridge: ObservableObject {
     /// Pull the last `days` of Apple Health into the on-device store under the `apple-health` source,
     /// then write NOOP's own computed metrics back into Health. Safe to call repeatedly (idempotent
     /// upserts keyed by day).
-    func sync(days: Int = 30) async {
+    func sync(days: Int = 30, deferScaleWriteBack: Bool = false) async {
         guard auth == .authorized, !syncing else { return }
         await syncProfile()
         syncing = true
@@ -459,7 +461,11 @@ final class HealthKitBridge: ObservableObject {
             try await store.upsertDailyMetrics(dmRows, deviceId: appleDeviceId)
             try await store.upsertMetricSeries(points, deviceId: appleDeviceId)
             try await writeBack(whoopStore: store)
-            try await writeBackScaleReadings(whoopStore: store)
+            if deferScaleWriteBack {
+                scheduleDeferredScaleWriteBack(days: 14)
+            } else {
+                try await writeBackScaleReadings(whoopStore: store)
+            }
             lastSync = Date()
             lastError = nil
         } catch {
@@ -568,6 +574,7 @@ final class HealthKitBridge: ObservableObject {
     }
 
     func writeLatestRenphoScaleReading() async {
+        deferredScaleWriteBackTask?.cancel()
         guard UserDefaults.standard.bool(forKey: ScaleIntegrationPrefs.writeRenphoToAppleHealthKey) else {
             Self.scaleLog("Apple Health backfill skipped; setting is off")
             return
@@ -589,6 +596,24 @@ final class HealthKitBridge: ObservableObject {
         } catch {
             Self.scaleLog("Apple Health backfill failed: \(error.localizedDescription)")
             lastError = "Scale → Apple Health failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func scheduleDeferredScaleWriteBack(days: Int) {
+        guard UserDefaults.standard.bool(forKey: ScaleIntegrationPrefs.writeRenphoToAppleHealthKey) else { return }
+        deferredScaleWriteBackTask?.cancel()
+        deferredScaleWriteBackTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: Self.foregroundScaleWriteBackDelayNs)
+            guard !Task.isCancelled, let self else { return }
+            guard self.auth == .authorized, let localStore = await self.repo.storeHandle() else { return }
+            do {
+                Self.scaleLog("Apple Health deferred scale write-back starting")
+                try await self.writeBackScaleReadings(whoopStore: localStore, days: days)
+                Self.scaleLog("Apple Health deferred scale write-back completed")
+            } catch {
+                Self.scaleLog("Apple Health deferred scale write-back failed: \(error.localizedDescription)")
+                self.lastError = "Scale → Apple Health failed: \(error.localizedDescription)"
+            }
         }
     }
 

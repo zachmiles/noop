@@ -14,9 +14,9 @@ struct ScreenScaffold<Content: View, Trailing: View>: View {
     /// Lazily materialise the content column. When `true` the inner stack is a `LazyVStack`,
     /// so a screen whose content ends in a long `ForEach` only builds the cards on screen
     /// rather than all of them up-front — the fix for Intelligence "ALL" freezing on an
-    /// 800+ day imported history (#345). Defaults to `false` so every existing caller keeps
-    /// the eager `VStack` and its identical layout/scroll behaviour.
-    var lazy: Bool = false
+    /// 800+ day imported history (#345). Defaults to `true` because dashboard screens are
+    /// mostly scrollable card stacks and benefit from on-demand materialization.
+    var lazy: Bool = true
     /// Optional full-bleed view drawn behind the scroll content at the TOP of the screen (e.g. Today's
     /// day-cycle scene). Defaults to nil so other screens stay on the flat canvas; nil renders nothing.
     var topBackground: AnyView? = nil
@@ -105,7 +105,7 @@ extension ScreenScaffold where Trailing == EmptyView {
     /// Convenience init for the common case with no header trailing element — keeps every existing
     /// call site (which never passed `trailing`) source-compatible.
     init(title: LocalizedStringKey?, subtitle: LocalizedStringKey? = nil,
-         onRefresh: (() async -> Void)? = nil, lazy: Bool = false, topBackground: AnyView? = nil,
+         onRefresh: (() async -> Void)? = nil, lazy: Bool = true, topBackground: AnyView? = nil,
          @ViewBuilder content: @escaping () -> Content) {
         self.init(title: title, subtitle: subtitle, onRefresh: onRefresh, lazy: lazy,
                   topBackground: topBackground, trailing: { EmptyView() }, content: content)

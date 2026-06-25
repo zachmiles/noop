@@ -145,7 +145,11 @@ struct RootView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(StrandPalette.surfaceBase.ignoresSafeArea())
         }
-        .task { await repo.refresh() }
+        .task {
+            // AppModel owns the deeper launch pipeline. The shell only needs enough cached data
+            // to make first paint useful if it appears before AppModel's startup task completes.
+            if !repo.loaded { await repo.refresh(days: AppModel.launchRefreshDays) }
+        }
         // Honour a cross-screen request to open a top-level destination (e.g. Live's "Manage devices"),
         // then clear it so the same tap can fire again later. Devices maps to the `.devices` sidebar item.
         .onChangeCompat(of: router.requestedDestination) { dest in

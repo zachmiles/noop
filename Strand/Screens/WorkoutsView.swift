@@ -4,6 +4,12 @@ import StrandAnalytics
 import WhoopStore
 import Foundation
 
+extension WorkoutRow {
+    var stableListID: String {
+        "\(source)|\(startTs)|\(endTs)|\(sport)"
+    }
+}
+
 // MARK: - Workouts
 //
 // The activity log, instrument-grade and uniform. Built ONLY from the locked Noop
@@ -106,13 +112,14 @@ struct WorkoutsView: View {
                 let windowRows = sessions(for: resolved)
                 let groups = sportGroups(from: windowRows)
                 let zonesSummary = WorkoutZones.summary(from: windowRows)
+                let zonesBySport = sportZoneSummaries(from: windowRows)
 
                 HStack { startLiveWorkoutButton; Spacer() }
                 rangeBar(rows: windowRows, effectiveRange: resolved)
                 if let postLogNote { postLogBanner(postLogNote) }
                 effortHero(rows: windowRows, effectiveRange: resolved, groups: groups)
                 summarySection(rows: windowRows, effectiveRange: resolved, groups: groups)
-                breakdownSection(groups: groups, rows: windowRows)
+                breakdownSection(groups: groups, zonesBySport: zonesBySport)
                 if let z = zonesSummary {
                     zonesSection(z, totalSessions: windowRows.count)
                 }
@@ -517,15 +524,15 @@ struct WorkoutsView: View {
 
     // MARK: - Activity breakdown (per-sport NoopCards, identical layout)
 
-    private func breakdownSection(groups: [SportGroup], rows: [WorkoutRow]) -> some View {
+    private func breakdownSection(groups: [SportGroup],
+                                  zonesBySport: [String: WorkoutZones.Summary]) -> some View {
         VStack(alignment: .leading, spacing: NoopMetrics.gap) {
             SectionHeader("Activity Breakdown",
                           overline: "By sport",
                           trailing: "\(groups.count) sport\(groups.count == 1 ? "" : "s")")
             LazyVGrid(columns: breakdownColumns, alignment: .leading, spacing: NoopMetrics.gap) {
                 ForEach(groups) { g in
-                    // This sport's own sessions, so the card can carry an HR-zone mini-bar.
-                    sportCard(g, zones: WorkoutZones.summary(from: rows.filter { $0.sport == g.sport }))
+                    sportCard(g, zones: zonesBySport[g.sport])
                 }
             }
         }
@@ -700,7 +707,7 @@ struct WorkoutsView: View {
         LazyVStack(spacing: 0) {
             sessionHeaderRow
             Divider().overlay(StrandPalette.hairline)
-            ForEach(Array(rows.enumerated()), id: \.offset) { idx, row in
+            ForEach(Array(rows.enumerated()), id: \.element.stableListID) { idx, row in
                 sessionRow(row)
                     .background(idx % 2 == 1
                                 ? StrandPalette.surfaceInset.opacity(0.4)
@@ -903,6 +910,16 @@ struct WorkoutsView: View {
             .map { SportGroup(sport: $0.key, count: $0.value.count,
                               totalTimeS: $0.value.time, totalKcal: $0.value.kcal) }
             .sorted { ($0.count, $0.totalTimeS) > ($1.count, $1.totalTimeS) }
+    }
+
+    /// Builds each sport's HR-zone summary in one grouped pass instead of filtering the full
+    /// workout window once per sport card.
+    private func sportZoneSummaries(from rows: [WorkoutRow]) -> [String: WorkoutZones.Summary] {
+        var rowsBySport: [String: [WorkoutRow]] = [:]
+        for row in rows {
+            rowsBySport[row.sport, default: []].append(row)
+        }
+        return rowsBySport.compactMapValues { WorkoutZones.summary(from: $0) }
     }
 
     /// The most-frequent sport (modal), derived from the already-built groups.
