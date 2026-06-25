@@ -28,6 +28,156 @@ Template:
 - Notes:
 ```
 
+## 2026-06-25 - Charge naming and dashboard fallbacks
+
+- Status: committed in this fork as
+  `fd04a8c Rename Recovery to Charge and add fallbacks`.
+- Files:
+  - `Packages/StrandAnalytics/Sources/StrandAnalytics/RangeReport.swift`
+  - `Packages/StrandAnalytics/Tests/StrandAnalyticsTests/RangeReportTests.swift`
+  - `Strand/App/AppModel.swift`
+  - `Strand/Data/Repository.swift`
+  - `Strand/Resources/Localizable.xcstrings`
+  - `Strand/Screens/DataSourcesView.swift`
+  - `Strand/Screens/MetricExplorerView.swift`
+  - `Strand/Screens/TodayView.swift`
+  - `Strand/Screens/TrendsView.swift`
+  - `StrandiOS/App/AppToastCoordinator.swift`
+  - `StrandiOS/Health/HealthKitBridge.swift`
+- Reason: make Charge the user-facing name for the recovery score and add
+  fallback handling so dashboard surfaces stay informative when direct Charge
+  data is sparse or still calibrating.
+- Watch during upstream syncs: upstream may still use Recovery labels in Trends,
+  metric exploration, data-source summaries, HealthKit write copy, or toast
+  strings. Preserve the internal `recovery` metric key for data compatibility,
+  but keep public copy aligned to Charge / Effort / Rest.
+- Validation: documentation review only for this entry; no build or test was
+  rerun as part of this documentation update.
+- Notes: this is a user-facing naming change, not a schema rename.
+
+## 2026-06-25 - App-wide iOS island toast
+
+- Status: committed in this fork as
+  `98bc0b2 Add app-wide dynamic island toast`.
+- Files:
+  - `Strand/App/AppToastCenter.swift`
+  - `Strand/Screens/IntelligenceView.swift`
+  - `Strand/Screens/SleepView.swift`
+  - `Strand/Screens/TodayView.swift`
+  - `StrandiOS/App/AppIslandToast.swift`
+  - `StrandiOS/App/AppToastCoordinator.swift`
+  - `StrandiOS/App/StrandiOSApp.swift`
+- Reason: replace scattered inline status banners with a shared toast center and
+  iOS overlay that presents sync/success/warning/info states near the Dynamic
+  Island or status bar.
+- Watch during upstream syncs: upstream edits to iOS root app setup, screen-level
+  banners, status-bar behavior, or notification affordances may overlap. Keep
+  the shared toast center as the single status surface unless upstream provides a
+  better app-wide equivalent.
+- Validation: documentation review only for this entry; no build or test was
+  rerun as part of this documentation update.
+- Notes: the overlay is iOS-only while the toast model remains shared app state.
+
+## 2026-06-25 - Adaptive labels and compact controls
+
+- Status: committed in this fork as
+  `5668c8b Make UI labels truncatable and adaptive`.
+- Files:
+  - `Packages/StrandDesign/Sources/StrandDesign/Components.swift`
+  - `Strand/Resources/Localizable.xcstrings`
+  - `Strand/Screens/AppleHealthView.swift`
+  - `Strand/Screens/TrendsReportView.swift`
+  - `Strand/Screens/TrendsView.swift`
+  - `Strand/Screens/XiaomiBandView.swift`
+- Reason: keep labels, captions, segmented controls, and report controls usable
+  at smaller widths by allowing truncation/scaling and switching compact layouts
+  with `ViewThatFits`.
+- Watch during upstream syncs: upstream localization or screen layout changes
+  can reintroduce wrapping/overflow. Review compact-width UI after conflicts in
+  these files instead of accepting text/layout changes blindly.
+- Validation: documentation review only for this entry; no build or test was
+  rerun as part of this documentation update.
+- Notes: this commit also refreshed Health-related localization keys.
+
+## 2026-06-25 - Dashboard responsiveness and cache hardening
+
+- Status: committed in this fork as
+  `2404a10 Improve dashboard responsiveness`.
+- Files:
+  - `Packages/StrandDesign/Sources/StrandDesign/NoopMotion.swift`
+  - `Packages/StrandImport/Sources/StrandImport/AppleHealthImporter.swift`
+  - `Packages/WhoopStore/Sources/WhoopStore/JournalWorkoutAppleCache.swift`
+  - `Packages/WhoopStore/Sources/WhoopStore/MetricSeriesStore.swift`
+  - `Packages/WhoopStore/Sources/WhoopStore/MetricsCache.swift`
+  - `Packages/WhoopStore/Tests/WhoopStoreTests/MetricSeriesStoreTests.swift`
+  - `Packages/WhoopStore/Tests/WhoopStoreTests/MetricsCacheTests.swift`
+  - `Strand/App/AppModel.swift`
+  - `Strand/App/RootView.swift`
+  - `Strand/BLE/SourceCoordinator.swift`
+  - `Strand/Data/Repository.swift`
+  - `Strand/Screens/AppleHealthView.swift`
+  - `Strand/Screens/InsightsHubView.swift`
+  - `Strand/Screens/InsightsView.swift`
+  - `Strand/Screens/ScreenScaffold.swift`
+  - `Strand/Screens/TodayView.swift`
+  - `Strand/Screens/WorkoutsView.swift`
+  - `StrandTests/WorkoutRowIdentityTests.swift`
+  - `StrandiOS/App/StrandiOSApp.swift`
+  - `StrandiOS/Health/HealthKitBridge.swift`
+  - `Tools/Backfill/Sources/backfill/main.swift`
+- Reason: improve dashboard and insights behavior under constrained layouts,
+  harden metric/workout cache reads, and add regression coverage for metric
+  series and workout-row identity.
+- Watch during upstream syncs: upstream changes in repository caching, Today,
+  Insights, Apple Health, BLE coordination, or shared screen scaffolding should
+  be checked against the fork's responsiveness and cache behavior before merging.
+- Validation: documentation review only for this entry; no build or test was
+  rerun as part of this documentation update.
+- Notes: treat the UI and persistence parts as related; the responsive surfaces
+  depend on stable, deduplicated metric/workout data.
+
+## 2026-06-24 - Localization catalog refresh
+
+- Status: committed in this fork as `20df37b Update localization catalog`.
+- Files:
+  - `Strand/Resources/Localizable.xcstrings`
+- Reason: refresh the string catalog after the Apple Health profile and dashboard
+  changes.
+- Watch during upstream syncs: this file is high-conflict with upstream
+  localization work. Resolve structurally and preserve keys added for Health
+  profile ownership, adaptive UI labels, Charge naming, and iOS toast copy.
+- Validation: documentation review only for this entry; no build or test was
+  rerun as part of this documentation update.
+- Notes: this supersedes the earlier same-day catalog refresh where keys overlap.
+
+## 2026-06-24 - Apple Health-owned profile measurements
+
+- Status: committed in this fork as
+  `c1d9e0e Read profile measurements from Apple Health`.
+- Files:
+  - `Packages/StrandImport/Sources/StrandImport/AppleHealthImporter.swift`
+  - `Packages/StrandImport/Sources/StrandImport/ImportModels.swift`
+  - `Packages/StrandImport/Tests/StrandImportTests/AppleHealthImporterTests.swift`
+  - `Strand/App/AppModel.swift`
+  - `Strand/Data/AppleHealthImport.swift`
+  - `Strand/Data/Profile.swift`
+  - `Strand/Onboarding/OnboardingWizard.swift`
+  - `Strand/Screens/SettingsView.swift`
+  - `Strand/Screens/TodayView.swift`
+  - `StrandiOS/App/StrandiOSApp.swift`
+  - `StrandiOS/Health/HealthKitBridge.swift`
+- Reason: let Apple Health and Apple Health exports populate trusted profile
+  fields such as age, sex, weight, and height, with Health-owned flags for body
+  measurements that should continue to refresh from the source of truth.
+- Watch during upstream syncs: upstream edits to Apple Health import models,
+  HealthKit bridging, onboarding/profile copy, Settings, or Today must preserve
+  the Health-backed profile flow unless Zach explicitly returns to manual-only
+  profile entry.
+- Validation: documentation review only for this entry; no build or test was
+  rerun as part of this documentation update.
+- Notes: height and weight remain locally editable only until real Health values
+  arrive; after that the UI should make Health ownership clear.
+
 ## 2026-06-24 - Merge upstream v7.1/v7.2 into fork
 
 - Status: committed on sync branch `sync/upstream-2026-06-24`.

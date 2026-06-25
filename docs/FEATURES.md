@@ -11,8 +11,10 @@ shipped app (sideload the `.apk`); and iOS ships as an **unsigned `.ipa` you sid
 AltStore/SideStore — signed on your own iPhone with your own free Apple ID, so there's no App
 Store or developer account and NOOP stays anonymous (see [docs/IOS.md](IOS.md); you can still
 build it yourself in Xcode). It shares NOOP's analysis code, so its results match
-macOS; it is newer and less battle-tested, with live BLE on a physical iPhone not yet fully
-validated.
+macOS; reads Apple Health-backed profile values where permitted; and uses an
+app-wide status toast near the Dynamic Island or status bar for sync and completion
+states. It is newer and less battle-tested, with live BLE on a physical iPhone
+not yet fully validated.
 
 > **Not affiliated with WHOOP.** NOOP is independent interoperability software for *your own*
 > device and *your own* data. "WHOOP" is used only to identify the hardware NOOP talks to.
@@ -80,7 +82,8 @@ The onboarding wizard (`OnboardingWizard.swift`) appears on first launch and run
    ~12 seconds, a reassurance card appears explaining the strap won't show in System Settings,
    that only one host can hold it at a time (close the WHOOP phone app), etc.
 6. **Bonded celebration** — a Charge ring blooms in when the strap bonds, with battery %.
-7. **Profile** — age, sex, weight, height (feeds zones, calories and baselines). Shows your
+7. **Profile** — age, sex, weight, height (feeds zones, calories and baselines).
+   Apple Health can fill trusted values where the platform allows it. Shows your
    estimated max heart rate.
 8. **Import (optional)** — points you to Data Sources; fully skippable.
 9. **Done** — "Your thread starts here."
@@ -491,6 +494,7 @@ of history. On-device and approximate — informational only, **not** a diagnosi
 
 - **Profile** — age, sex, weight, height, and max heart rate (auto-estimated via Tanaka, or a
   manual override). These power your zones, calorie estimates and Charge baselines.
+  Apple Health can keep trusted body measurements current where the platform allows it.
 - **Step calibration** — tune the stride/step estimate to your own walking so step and distance
   figures read closer to reality.
 - **Units** — choose your preferred measurement units (metric / imperial) across the app.

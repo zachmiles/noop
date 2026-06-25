@@ -2,13 +2,14 @@
 
 NOOP is a standalone, fully **offline** companion app for WHOOP straps (4.0 and 5.0). It pairs
 directly with the strap over Bluetooth Low Energy, stores everything on-device in SQLite, imports
-WHOOP CSV exports and Apple Health exports, and computes recovery / strain / HRV / sleep locally.
+WHOOP CSV exports and Apple Health exports, and computes Charge / Effort / Rest / HRV / sleep
+locally.
 There is no cloud, no account — the app talks only to **your own device** and
 works only with **your own data**.
 
 > **Not affiliated with WHOOP, and not a medical device.** "WHOOP" is used only to identify the
 > hardware this software interoperates with. NOOP contains no WHOOP code, firmware, or assets. All
-> outputs (HR, HRV, recovery, strain, sleep, SpO₂, temperature) are approximations and are **not**
+> outputs (HR, HRV, Charge, Effort, Rest, SpO₂, temperature) are approximations and are **not**
 > clinically validated. See [`DISCLAIMER.md`](../DISCLAIMER.md) and [`ATTRIBUTION.md`](../ATTRIBUTION.md).
 
 ---
@@ -17,9 +18,9 @@ works only with **your own data**.
 
 The codebase is split into reusable, cross-platform Swift packages plus a thin platform-specific
 app layer. The **macOS app is the reference implementation**; **Android ships as a full app** under
-`android/`, and **iOS ships as a build-from-source target (`NOOPiOS`)** folded into main in v1.94 —
-built in Xcode, not distributed (no App Store / TestFlight, to stay anonymous). All reuse the same
-packages where they can.
+`android/`, and **iOS ships as an unsigned sideloadable `.ipa` plus the source target
+(`NOOPiOS`)**. There is still no App Store / TestFlight path, which keeps the project anonymous.
+All reuse the same packages where they can.
 
 ```
 Strand/
@@ -41,7 +42,7 @@ Strand/
 ├── Packages/
 │   ├── WhoopProtocol/          # BLE frame parsing, CRC, command/event/packet decode
 │   ├── WhoopStore/             # GRDB/SQLite persistence (migrations, streams, caches)
-│   ├── StrandAnalytics/        # HRV / recovery / strain / sleep / correlation math
+│   ├── StrandAnalytics/        # HRV / Charge / Effort / Rest / correlation math
 │   ├── StrandImport/           # WHOOP CSV + Apple Health importers
 │   └── StrandDesign/           # SwiftUI design system (palette, components, charts)
 ├── Tools/
@@ -216,14 +217,13 @@ swift run backfill
 
 ---
 
-## iOS (build-from-source only)
+## iOS (direct download and source builds)
 
-iOS ships as a **build-from-source-only** target, folded into main in v1.94. There is **no App
-Store or TestFlight build** — both require a real Apple Developer identity, which is fundamentally
-at odds with NOOP staying anonymous, so the only way to run it is to build it yourself in Xcode.
-The iOS app is **newer and less battle-tested** than macOS and Android: live BLE on a real iPhone
-isn't yet fully validated. It shares the same analytics packages, so once data is in, results match
-macOS.
+iOS ships as an **unsigned `.ipa`** you sideload with AltStore/SideStore, and the source target is
+still available when you want to build it yourself. There is **no App Store or TestFlight build** —
+both require a real Apple Developer identity, which is at odds with NOOP staying anonymous. The iOS
+app is **newer and less battle-tested** than macOS and Android: live BLE on a real iPhone isn't yet
+fully validated. It shares the same analytics packages, so once data is in, results match macOS.
 
 The `NOOPiOS` app target (plus the `NOOPiOSWidgets` WidgetKit / Live Activity extension) already
 exists in `project.yml` — you don't need to add it. All five packages target `.iOS(.v16)`, so the

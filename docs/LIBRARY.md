@@ -3,8 +3,8 @@
 NOOP is a standalone, fully **offline** companion app for WHOOP straps (4.0 and
 5.0). It pairs directly with the user's own strap over Bluetooth — **no WHOOP
 cloud or account** — stores everything on-device in SQLite, can
-import WHOOP CSV and Apple Health exports, and computes recovery, strain, HRV,
-and sleep locally.
+import WHOOP CSV and Apple Health exports, and computes Charge, Effort, Rest,
+HRV, and sleep locally.
 
 This document is the reference for the **reusable, cross-platform Swift
 packages** that make that possible. They are designed to be vendored and reused
@@ -14,7 +14,7 @@ independently of the reference macOS app.
 > the hardware these packages interoperate with. NOOP contains no WHOOP
 > proprietary code, firmware, or assets and works only with the user's own
 > device and data. **NOOP is not a medical device.** Every derived metric (HR,
-> HRV, recovery, strain, sleep, SpO₂, temperature) is an approximation and is
+> HRV, Charge, Effort, Rest, SpO₂, temperature) is an approximation and is
 > not clinically validated.
 
 ## Credits
@@ -37,7 +37,7 @@ interoperability work:
 |---|---|---|---|---|
 | **WhoopProtocol** | BLE frame parsing, CRC, command/event/packet decode (the reverse-engineering core) | ✅ Pure Foundation | none | none |
 | **WhoopStore** | GRDB/SQLite persistence: migrations, decoded streams, raw outbox, metric caches | ✅ Pure (server-free) | none | GRDB |
-| **StrandAnalytics** | HRV / recovery / strain / sleep / correlation math | ✅ Pure, deterministic | none | (WhoopProtocol, WhoopStore types) |
+| **StrandAnalytics** | HRV / Charge / Effort / Rest / correlation math | ✅ Pure, deterministic | none | (WhoopProtocol, WhoopStore types) |
 | **StrandImport** | WHOOP CSV + Apple Health (`export.xml`, streaming) importers | ✅ Pure Foundation/XML | none | ZIPFoundation |
 | **StrandDesign** | SwiftUI design system (palette, components, charts) | SwiftUI only | SwiftUI | none |
 
@@ -66,9 +66,9 @@ StrandDesign   (standalone — SwiftUI only, no internal deps)
 The reference app target (`Strand/`, macOS SwiftUI) is the integration layer: it
 owns the CoreBluetooth transport, wraps the protocol library's UUID *strings* in
 `CBUUID`, and wires the pure packages together. The macOS and iOS reference apps
-(the iOS target is build-from-source only) consume these packages directly, and
-an Android app ships alongside them; the pure packages run unchanged across macOS
-and iOS.
+consume these packages directly, iOS also ships as an unsigned sideloadable app,
+and an Android app ships alongside them; the pure packages run unchanged across
+macOS and iOS.
 
 ---
 
@@ -363,6 +363,8 @@ targets: [
 | `BehaviorInsights` | `effect(behaviorDays:...)` → `BehaviorEffect`; `rank(...)`, `sentence(_:)`. |
 
 `UserProfile` (`weightKg`, `heightCm`, `age`, `sex`) is the shared profile input.
+The app can populate those fields from Apple Health or Apple Health exports where
+the platform allows it, while the analytics package stays pure and caller-driven.
 
 ### Minimal usage
 
@@ -377,13 +379,13 @@ print("RMSSD:", hrv.rmssd ?? .nan, "ms")
 // Day strain from the full HR series.
 let strain = StrainScorer.strain(hrSamples, maxHR: 190, restingHR: 50)  // 0…21
 
-// Full-day rollup (sleep + recovery + strain + workouts) in one call.
+// Full-day rollup (sleep + Charge/recovery + Effort/strain + workouts) in one call.
 let day = AnalyticsEngine.analyzeDay(
     day: "2026-06-07",
     hr: hrSamples, rr: rrIntervals, gravity: gravitySamples,
     profile: UserProfile(weightKg: 78, heightCm: 182, age: 34, sex: "male")
 )
-print("recovery:", day.recovery ?? .nan, "strain:", day.strain ?? .nan)
+print("Charge:", day.recovery ?? .nan, "Effort:", day.strain ?? .nan)
 ```
 
 ---

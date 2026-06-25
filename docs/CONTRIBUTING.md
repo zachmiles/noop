@@ -2,15 +2,15 @@
 
 NOOP is a standalone, fully **offline** companion app for WHOOP straps (4.0 and 5.0). It pairs
 directly with the strap over Bluetooth Low Energy, stores everything on-device in SQLite, imports
-WHOOP CSV exports and Apple Health exports, and computes recovery / strain / HRV / sleep locally —
-no cloud, no account. This document explains how the repository is laid out, how to
+WHOOP CSV exports and Apple Health exports, and computes Charge / Effort / Rest / HRV / sleep
+locally — no cloud, no account. This document explains how the repository is laid out, how to
 build and test it, the conventions every change is expected to follow, and the safety rules that are
 non-negotiable (especially on the Bluetooth path).
 
 > **Not affiliated with WHOOP, and not a medical device.** "WHOOP" is used only to identify the
 > hardware this software interoperates with. NOOP reads **your own data** off **your own device**;
 > it contains no WHOOP code, firmware, or assets and performs no DRM circumvention. Every derived
-> metric (HR, HRV, recovery, strain, sleep, SpO₂, temperature) is an **approximation** and is **not**
+> metric (HR, HRV, Charge, Effort, Rest, SpO₂, temperature) is an **approximation** and is **not**
 > clinically validated. See [`../DISCLAIMER.md`](../DISCLAIMER.md) and
 > [`../ATTRIBUTION.md`](../ATTRIBUTION.md).
 
@@ -61,7 +61,7 @@ A few principles run through the whole codebase. Internalize them before opening
 
 The codebase is split into reusable, cross-platform Swift packages plus a thin platform-specific app
 layer. The **macOS app is the reference implementation**; **Android ships as a full app** under
-`android/`, and **iOS was folded into `main` in v1.94** and is a **build-from-source-only target**
+`android/`, and **iOS ships as an unsigned sideloadable `.ipa` plus a source-build target**
 (`NOOPiOS` / `NOOPiOSWidgets`) — no App Store/TestFlight, to keep the project anonymous (see
 [`IOS.md`](IOS.md)). All reuse the same packages where they can.
 
@@ -100,7 +100,7 @@ Strand/
 |---|---|---|
 | Decoding strap bytes, CRC, framing, packet/event types | `Packages/WhoopProtocol` | **Platform-pure — no CoreBluetooth.** Runs in tests/CLI unchanged. |
 | Persisting decoded data, migrations, caches, reads | `Packages/WhoopStore` | GRDB/SQLite only. |
-| Computing recovery / strain / HRV / sleep / correlations | `Packages/StrandAnalytics` | Pure, database-free analyzers. |
+| Computing Charge / Effort / Rest / HRV / correlations | `Packages/StrandAnalytics` | Pure, database-free analyzers. |
 | Parsing WHOOP CSV or Apple Health `export.xml` | `Packages/StrandImport` | Header-name-driven CSV; streaming SAX XML. |
 | Colors, fonts, motion, cards, charts | `Packages/StrandDesign` | No external UI deps; bridges AppKit/UIKit. |
 | CoreBluetooth, bonding, offload, live state | `Strand/BLE`, `Strand/Collect` | macOS-app layer — wraps the pure packages. |
@@ -518,12 +518,12 @@ Contributions toward these are welcome — open an issue to coordinate first.
   on-device, and imports WHOOP / Apple Health / Health Connect. Pre-built APKs are in
   [Releases](https://github.com/NoopApp/noop/releases). Continued real-hardware testing across more devices is always welcome
   (an emulator can't reach a physical strap).
-- **iOS (build-from-source target on `main`).** iOS was folded into `main` in v1.94 as a first-class
-  build-from-source target — the `NOOPiOS` and `NOOPiOSWidgets` schemes (app target plus widgets, a
+- **iOS (unsigned IPA and source target on `main`).** iOS was folded into `main` in v1.94 as a
+  first-class source target — the `NOOPiOS` and `NOOPiOSWidgets` schemes (app target plus widgets, a
   Live Activity, and HealthKit), built against current code in Xcode, with CI compiling both macOS and
-  iOS on every change. It is **build-it-yourself only, intentionally not shipped:** iOS has no
-  anonymous distribution path (the App Store and TestFlight both require a real Apple Developer
-  identity), which is at odds with NOOP staying anonymous, so there are no pre-built downloads. Every
+  iOS on every change. It also ships as an **unsigned `.ipa`** for AltStore/SideStore sideloading.
+  It is intentionally not on the App Store or TestFlight: both require a real Apple Developer identity,
+  which is at odds with NOOP staying anonymous. Every
   package declares `.iOS(.v16)` and guards UI-framework code with `#if canImport(UIKit)/AppKit`, so
   the shared core and analytics run unmodified — results match macOS. It is newer and less
   battle-tested than macOS/Android (live BLE on a real iPhone isn't fully validated yet), so

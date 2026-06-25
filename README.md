@@ -142,8 +142,8 @@ Everything runs **offline**. The only feature that ever uses the network is the 
 NOOP is a standalone, fully **offline** companion app for WHOOP straps (4.0 and
 5.0). It pairs directly with the strap over Bluetooth, stores everything on your
 own device in SQLite, imports your existing WHOOP and Apple Health history, and
-computes recovery, strain, HRV, and sleep **locally**, with no WHOOP account and
-no WHOOP cloud.
+computes Charge, Effort, Rest, HRV, and sleep **locally**, with no WHOOP account
+and no WHOOP cloud.
 
 It is built on prior community interoperability work and exists for one
 reason: to let someone who owns a WHOOP strap read **their own biometric data**
@@ -189,8 +189,9 @@ that premise:
   a device you own and reads data you generated.
 - **Bring your history.** Already have years of data in the official app or in
   Apple Health? Import the WHOOP CSV export and/or your Apple Health `export.xml`
-  once, and it's permanently on your machine.
-- **Transparent math.** Recovery, strain, HRV, and sleep are recomputed on-device
+  once, and it's permanently on your machine. Apple Health can also populate
+  trusted profile fields such as age, sex, height, and weight.
+- **Transparent math.** Charge, Effort, Rest, HRV, and sleep are recomputed on-device
   from documented, citable methods (Task Force 1996 HRV, Karvonen %HRR, Edwards /
   Banister TRIMP, Tanaka HRmax, and so on). The algorithms are approximations of —
   not reproductions of — any proprietary model, and every analyzer file documents
@@ -207,7 +208,7 @@ shared cross-platform code.
 
 | Screen | What it does |
 |---|---|
-| **Today** (Control Center) | Home dashboard: recovery ring, a "today's synthesis" insight, a grid of stat tiles (recovery, strain, sleep, HRV, RHR, SpO₂, respiratory, steps, weight, calories) each with a 14-day sparkline, live strap **battery %** and HR trend, recent workouts, and a data-sources footer. |
+| **Today** (Control Center) | Home dashboard: Charge ring, a "today's synthesis" insight, a grid of stat tiles (Charge, Effort, Rest, HRV, RHR, SpO₂, respiratory, steps, weight, calories) each with a 14-day sparkline, live strap **battery %** and HR trend, recent workouts, and a data-sources footer. |
 | **Readiness** | An on-device "should you push today?" read that synthesizes established sports-science signals from your own history — HRV vs your baseline (Plews/Buchheit), resting-HR drift (Lamberts), sleeping respiratory-rate drift, training-load balance (acute:chronic workload ratio, Gabbett) and training monotony (Foster) — into a single headline (Primed / Balanced / Strained / Run down) with the drivers behind it. Pure local math, not medical advice. |
 | **Live** | Real-time view of the connected strap — heart rate and frame stream as they arrive (~1 Hz). |
 | **Breathe** | **HRV haptic breathing biofeedback.** The strap both *measures* HRV (R-R intervals) and *buzzes* its haptic motor, so NOOP paces your breath with felt cues (one buzz inhale, two exhale) and shows live HR + rolling RMSSD responding as the session deepens. Presets: Relax 4-6, Coherence 5.5, Box 4-4. Each session reports a **pre/post HRV outcome** so you can see how much you settled. |
@@ -225,8 +226,8 @@ shared cross-platform code.
 | **Data Sources** | One-tap import of a WHOOP CSV export, an Apple Health export, or a **nutrition CSV** (Cronometer / MacroFactor), plus live-strap status. "Bring your history in once, then it's yours." |
 | **Notifications** | Configure local notifications and thresholds (`Strand/Data/NotificationSettingsStore.swift`). |
 | **Automations** | Turn the strap's physical inputs and live biometrics into Mac actions — all on-device (see below). |
-| **Coach** | An optional **AI Coach** you can ask about your data in plain language. It's the one feature that can ever use the network: off until you add your own key — Anthropic, OpenAI, or any OpenAI-compatible endpoint including a local/self-hosted model (Ollama, LM Studio) — and it sends only a short text summary of recent metrics plus your question, never raw streams or identifiers. With a local model the conversation never leaves your machine. Available on macOS, Android, and iOS. See [`docs/PRIVACY_SECURITY.md`](docs/PRIVACY_SECURITY.md). |
-| **Settings** | Profile, preferences, **step calibration** (tune the stride/step estimate to your own walking), unit choices, the in-app **What's new** changelog, and an opt-in **Experimental** section (WHOOP 5/MG protocol probes). On **iOS**, also **Export for Shortcuts** — a HealthKit-free path that hands your metrics to Apple Health via the Shortcuts app. |
+| **Coach** | An optional **AI Coach** you can ask about your data in plain language. It's the one feature that can ever use the network: off until you add your own key — Anthropic, OpenAI, Apple Foundation Models where available, or any OpenAI-compatible endpoint including a local/self-hosted model (Ollama, LM Studio) — and it sends only a short text summary of recent metrics plus your question, never raw streams or identifiers. With a local model the conversation never leaves your machine. Available on macOS, Android, and iOS. See [`docs/PRIVACY_SECURITY.md`](docs/PRIVACY_SECURITY.md). |
+| **Settings** | Profile, preferences, **step calibration** (tune the stride/step estimate to your own walking), unit choices, the in-app **What's new** changelog, and an opt-in **Experimental** section (WHOOP 5/MG protocol probes). Apple Health can keep profile measurements current where the platform allows it. On **iOS**, also **Export for Shortcuts** — a HealthKit-free path that hands your metrics to Apple Health via the Shortcuts app. |
 | **Support** | Attribution + **optional** crypto donations. The whole app works without them. |
 
 There is also a **menu-bar extra** (`Strand/MenuBar/MenuBarContent.swift`) with a
@@ -271,9 +272,9 @@ import required.
 
 | Platform | Status |
 |---|---|
-| **macOS** | ✅ Full app (`Strand/`, SwiftUI, macOS 13+). Pairs over BLE, offloads the strap's history, and scores recovery / strain / sleep on-device. The complete feature set above runs here. |
+| **macOS** | ✅ Full app (`Strand/`, SwiftUI, macOS 13+). Pairs over BLE, offloads the strap's history, and scores Charge / Effort / Rest on-device. The complete feature set above runs here. |
 | **Android** | ✅ Full app (`android/`, Jetpack Compose, Android 8+). Pairs over BLE, persists and scores on-device, and imports WHOOP / Apple Health / Health Connect. Grab the APK from [Releases](https://github.com/NoopApp/noop/releases). |
-| **iOS** | 📲 **Direct download**: an unsigned `.ipa` you sideload with AltStore/SideStore — it signs on your iPhone with your *own* free Apple ID, so there's an anonymous install path with no App Store / developer account (see [docs/IOS.md](docs/IOS.md)). Also still builds from source in Xcode. Shares the cross-platform Swift packages, so scoring matches macOS. Newer and less battle-tested than macOS/Android — live BLE on a real iPhone is still being validated; Apple Health + Live Activity widgets can be limited under a free signing identity. |
+| **iOS** | 📲 **Direct download**: an unsigned `.ipa` you sideload with AltStore/SideStore — it signs on your iPhone with your *own* free Apple ID, so there's an anonymous install path with no App Store / developer account (see [docs/IOS.md](docs/IOS.md)). Also still builds from source in Xcode. Shares the cross-platform Swift packages, so scoring matches macOS, reads Apple Health-backed profile values where permitted, and uses an app-wide status toast near the Dynamic Island / status bar. Newer and less battle-tested than macOS/Android — live BLE on a real iPhone is still being validated; Apple Health + Live Activity widgets can be limited under a free signing identity. |
 
 ### Strap support
 
@@ -340,7 +341,7 @@ needs a little data before everything fills in:
 - **Live heart rate** shows the moment the strap connects.
 - **Strain and sleep** appear after you've worn it and synced — the strap's last
   ~14 days offload automatically over the first few minutes.
-- **Recovery** needs a few nights for the app to learn your personal baseline,
+- **Charge** needs a few nights for the app to learn your personal baseline,
   then sharpens each night. WHOOP makes you wait for the same reason.
 - **In a hurry?** Import your WHOOP export in Data Sources and your full history
   fills in about a minute.
@@ -425,7 +426,8 @@ model):
   5 / MG.
 - **Apple Health export** (`AppleHealthImporter.swift`): a **streaming** SAX parser
   (`XMLParser`) for `export.xml` (which can exceed 1 GB), with correlation-dedupe,
-  unit normalization (e.g. SpO₂ fraction → %), and sleep-stage mapping.
+  unit normalization (e.g. SpO₂ fraction → %), sleep-stage mapping, and trusted
+  profile extraction for age, sex, height, and weight.
 - **Nutrition CSV** — a tolerant importer for daily-nutrition exports from
   **Cronometer** and **MacroFactor**, so calories and macros line up alongside your
   recovery and sleep on a shared timeline.
