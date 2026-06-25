@@ -1662,10 +1662,6 @@ struct SleepView: View {
 
     @ViewBuilder
     private var emptyState: some View {
-        // While the strap is mid-offload, say so — "No nights" reads as final otherwise (#77). The note
-        // owns the `LiveState` observation in its own leaf so the chunk count ticks without re-rendering
-        // SleepView (scroll-stutter isolation; identical output to the prior inline check).
-        SleepSyncingNote()
         if repo.loaded {
             ComingSoon(what: "No nights here yet. Import your WHOOP export in Data Sources to see every night, your sleep stages and trends straight away. Or open Intelligence to see last night computed from the strap after you wear it to bed.")
         } else {
@@ -1945,15 +1941,6 @@ private struct SleepMarkCard: View {
             guard let store = await repo.storeHandle() else { return }
             try? await store.upsertMetricSeries([mark.metricPoint], deviceId: repo.deviceId)
         }
-    }
-}
-
-/// The "Syncing strap history…" note, shown only while a historical offload is running (#77). Owns the
-/// `LiveState` observation so the chunk count ticks without re-rendering the rest of the Sleep screen.
-private struct SleepSyncingNote: View {
-    @EnvironmentObject private var live: LiveState
-    var body: some View {
-        if live.backfilling { SyncingHistoryNote(chunks: live.syncChunksThisSession) }
     }
 }
 

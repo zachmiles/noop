@@ -815,10 +815,6 @@ struct TodayView: View {
                 // The "still building" and "new here?" prompts are about getting today's scores going,
                 // so they stay anchored to today rather than reappearing on every navigated past day.
                 if selectedDayOffset == 0 && repo.today?.recovery == nil {
-                    // While the strap is mid-offload, say so — empty tiles read as final otherwise (#77).
-                    // Its own subview observes LiveState (backfilling + chunk count tick during an offload)
-                    // so it refreshes without re-rendering the rest of Today (scroll-stutter fix).
-                    SyncingHistoryNoteIfBackfilling()
                     if !scoresBuildingDismissed {
                         DataPendingNote(
                             title: "Live now. Your scores are building.",
@@ -3224,15 +3220,6 @@ private struct RecordingStatusLight: View {
             .buttonStyle(.plain)
             .accessibilityLabel(state.accessibilityText)
         }
-    }
-}
-
-/// The "Syncing strap history…" note, shown only while a historical offload is running (#77). Owns the
-/// `LiveState` observation so the chunk count ticks without re-rendering the rest of Today.
-private struct SyncingHistoryNoteIfBackfilling: View {
-    @EnvironmentObject private var live: LiveState
-    var body: some View {
-        if live.backfilling { SyncingHistoryNote(chunks: live.syncChunksThisSession) }
     }
 }
 
