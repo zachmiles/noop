@@ -1,5 +1,11 @@
-// swift-tools-version: 5.9
+// swift-tools-version: 6.2
 import PackageDescription
+
+let swiftSettings: [SwiftSetting] = [
+    .swiftLanguageMode(.v6),
+    .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
+    .enableUpcomingFeature("InferIsolatedConformances"),
+]
 
 let package = Package(
     name: "NoopLocalAccess",
@@ -19,18 +25,21 @@ let package = Package(
             name: "NoopLocalAccessCore",
             dependencies: [
                 .product(name: "GRDB", package: "GRDB.swift"),
-            ]
+            ],
+            swiftSettings: swiftSettings
         ),
         .executableTarget(
             name: "noop-local-access",
-            dependencies: ["NoopLocalAccessCore"]
+            dependencies: ["NoopLocalAccessCore"],
+            swiftSettings: swiftSettings
         ),
         .testTarget(
             name: "NoopLocalAccessCoreTests",
             dependencies: [
                 "NoopLocalAccessCore",
                 .product(name: "GRDB", package: "GRDB.swift"),
-            ]
+            ],
+            swiftSettings: swiftSettings
         ),
     ]
 )

@@ -136,6 +136,7 @@ final class AppToastCenter: ObservableObject {
             hidesStatusBar = false
         }
 
+        let collapseDuration = self.collapseDuration
         clearTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(collapseDuration * 1_000_000_000))
             await MainActor.run { self?.showNextAfterCollapse() }

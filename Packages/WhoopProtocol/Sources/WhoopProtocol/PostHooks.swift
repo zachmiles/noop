@@ -95,16 +95,18 @@ func formatMean(_ x: Double) -> String {
     String(format: "%.1f", x)
 }
 
-private let utcRangeFormatter: DateFormatter = {
+private func utcRangeString(from unix: UInt32) -> String {
     let f = DateFormatter()
     f.locale = Locale(identifier: "en_US_POSIX")
     f.timeZone = TimeZone(identifier: "UTC")
     f.dateFormat = "yyyy-MM-dd HH:mm 'UTC'"
-    return f
-}()
+    return f.string(from: Date(timeIntervalSince1970: TimeInterval(unix)))
+}
 
-func registerPostHooks() {
-    postHooks["realtime_data"] = { fb, frame, _, _ in
+func makePostHooks() -> [String: PostHook] {
+    var hooks: [String: PostHook] = [:]
+
+    hooks["realtime_data"] = { fb, frame, _, _ in
         let rrn = u8(frame, 13) ?? 0
         var rrs: [Int] = []
         for i in 0..<rrn {
@@ -118,7 +120,7 @@ func registerPostHooks() {
         fb.parsed["rr_intervals"] = .intArray(rrs)
     }
 
-    postHooks["event"] = { fb, frame, length, schema in
+    hooks["event"] = { fb, frame, length, schema in
         let evVal = frame.count > 6 ? Int(frame[6]) : nil
         let evName = evVal.flatMap { schema.enums["EventNumber"]?[String($0)] }
         guard let length = length else { return }
@@ -155,7 +157,7 @@ func registerPostHooks() {
         }
     }
 
-    postHooks["command_response"] = { fb, frame, length, schema in
+    hooks["command_response"] = { fb, frame, length, schema in
         guard let length = length else { return }
         let payEnd = min(length, frame.count)
         guard 7 <= payEnd else { return }
@@ -206,16 +208,16 @@ func registerPostHooks() {
             }
             if let lo = seen.min(), let hi = seen.max() {
                 fb.parsed["history_oldest"] = .string(
-                    utcRangeFormatter.string(from: Date(timeIntervalSince1970: TimeInterval(lo))))
+                    utcRangeString(from: lo))
                 fb.parsed["history_newest"] = .string(
-                    utcRangeFormatter.string(from: Date(timeIntervalSince1970: TimeInterval(hi))))
+                    utcRangeString(from: hi))
             }
         default:
             break
         }
     }
 
-    postHooks["raw_data"] = { fb, frame, length, schema in
+    hooks["raw_data"] = { fb, frame, length, schema in
         guard let length = length else { return }
         let spec = schema.packet(forType: Int(frame[4]))
         let dataLen = length - 7
@@ -289,7 +291,7 @@ func registerPostHooks() {
         }
     }
 
-    postHooks["historical_data"] = { fb, frame, length, schema in
+    hooks["historical_data"] = { fb, frame, length, schema in
         guard let length = length else { return }
         let spec = schema.packet(forType: Int(frame[4]))
         let version = Int(frame[5])
@@ -392,7 +394,7 @@ func registerPostHooks() {
         }
     }
 
-    postHooks["metadata"] = { fb, frame, length, _ in
+    hooks["metadata"] = { fb, frame, length, _ in
         guard let length = length else { return }
         let payEnd = min(length, frame.count)
         guard 7 < payEnd else { return }
@@ -410,7 +412,7 @@ func registerPostHooks() {
         }
     }
 
-    postHooks["console_logs"] = { fb, frame, length, _ in
+    hooks["console_logs"] = { fb, frame, length, _ in
         guard let length = length else { return }
         var txt = ""
         let lo = 11
@@ -424,4 +426,6 @@ func registerPostHooks() {
         // arbitrary bytes per frame as a String on the parse path. A log line is never this long.
         fb.parsed["log"] = .string(String(txt.prefix(2048)))
     }
+
+    return hooks
 }

@@ -1939,7 +1939,7 @@ private struct SleepMarkCard: View {
         live.append(log: mark.logLine)
         Task {
             guard let store = await repo.storeHandle() else { return }
-            try? await store.upsertMetricSeries([mark.metricPoint], deviceId: repo.deviceId)
+            _ = try? await store.upsertMetricSeries([mark.metricPoint], deviceId: repo.deviceId)
         }
     }
 }
@@ -1950,7 +1950,7 @@ private struct SleepMarkCard: View {
 /// ("solid = you, hatch = the context"). Pure geometry — stroke it in the stage colour and clip it to a
 /// capsule. `spacing` is the gap between lines; the lines run further than the bounds so the clip edges
 /// stay clean. Presentation-only; no data of its own.
-private struct DiagonalHatch: Shape {
+private nonisolated struct DiagonalHatch: Shape {
     var spacing: CGFloat = 5
     var lineWidth: CGFloat = 1
     func path(in rect: CGRect) -> Path {

@@ -39,6 +39,7 @@ private extension View {
     /// fires on the macOS-13 build that genuinely needs this path.
     @available(iOS, introduced: 16.0, deprecated: 17.0)
     @available(macOS, introduced: 13.0, deprecated: 14.0)
+    @available(watchOS, introduced: 9.0, deprecated: 10.0)
     @ViewBuilder
     func legacyOnChange<V: Equatable>(
         of value: V,

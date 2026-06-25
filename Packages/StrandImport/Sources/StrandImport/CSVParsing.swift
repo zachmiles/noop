@@ -454,15 +454,11 @@ enum WhoopTime {
         guard let s0 = raw?.trimmingCharacters(in: .whitespaces), !s0.isEmpty else { return nil }
 
         // 1) ISO-8601 with embedded offset (e.g. "...T...Z", "...+01:00").
-        if let d = isoFormatter.date(from: s0) { return d }
-        if let d = isoFormatterFractional.date(from: s0) { return d }
+        if let d = parseISODate(s0) { return d }
 
         // 2) Plain "YYYY-MM-DD HH:MM:SS" or with a 'T'.
         let normalized = s0.replacingOccurrences(of: "T", with: " ")
-        // Reuse one formatter (allocating a DateFormatter per CSV row was a measurable cost on
-        // imports with tens of thousands of rows). Imports run on a single thread, so the shared
-        // mutable formatter is safe; only timeZone/dateFormat are set per parse.
-        let fmt = plainFormatter
+        let fmt = makePlainFormatter()
         fmt.timeZone = TimeZone(secondsFromGMT: offsetMinutes * 60) ?? TimeZone(identifier: "UTC")!
         for pattern in ["yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd HH:mm", "yyyy-MM-dd"] {
             fmt.dateFormat = pattern
@@ -477,27 +473,17 @@ enum WhoopTime {
     /// be interpreted in a chosen timezone (used by the Hevy lifting importer, #649).
     static func parseISOWithOffset(_ raw: String?) -> Date? {
         guard let s = raw?.trimmingCharacters(in: .whitespaces), !s.isEmpty else { return nil }
-        if let d = isoFormatter.date(from: s) { return d }
-        if let d = isoFormatterFractional.date(from: s) { return d }
-        return nil
+        return parseISODate(s)
     }
 
-    private static let plainFormatter: DateFormatter = {
+    private static func makePlainFormatter() -> DateFormatter {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
         f.calendar = Calendar(identifier: .gregorian)
         return f
-    }()
+    }
 
-    private static let isoFormatter: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime]
-        return f
-    }()
-
-    private static let isoFormatterFractional: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return f
-    }()
+    private static func parseISODate(_ string: String) -> Date? {
+        try? Date(string, strategy: Date.ISO8601FormatStyle(includingFractionalSeconds: false))
+    }
 }

@@ -24,9 +24,9 @@ enum NOOPIntentError: Error, CustomLocalizedStringResourceConvertible {
 
 @available(macOS 13.0, *)
 struct BuzzStrapIntent: AppIntent {
-    static var title: LocalizedStringResource = "Buzz Strap"
-    static var description = IntentDescription("Vibrate your connected WHOOP strap.")
-    static var openAppWhenRun = false
+    static let title: LocalizedStringResource = "Buzz Strap"
+    static let description = IntentDescription("Vibrate your connected WHOOP strap.")
+    static let openAppWhenRun = false
 
     @MainActor
     func perform() async throws -> some IntentResult {
@@ -39,9 +39,9 @@ struct BuzzStrapIntent: AppIntent {
 
 @available(macOS 13.0, *)
 struct MarkMomentIntent: AppIntent {
-    static var title: LocalizedStringResource = "Mark a Moment"
-    static var description = IntentDescription("Record a timestamped moment (and buzz the strap if it's connected).")
-    static var openAppWhenRun = false
+    static let title: LocalizedStringResource = "Mark a Moment"
+    static let description = IntentDescription("Record a timestamped moment (and buzz the strap if it's connected).")
+    static let openAppWhenRun = false
 
     @MainActor
     func perform() async throws -> some IntentResult {

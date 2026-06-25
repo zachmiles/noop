@@ -83,22 +83,25 @@ struct StrandiOSApp: App {
                 .dynamicTypeSize(...DynamicTypeSize.accessibility1)
                 .onReceive(model.live.$heartRate) { _ in
                     let day = model.repo.days.last(where: { $0.recovery != nil })
-                    liveActivity.update(
-                        bpm: model.live.connected ? (model.bpm ?? model.live.heartRate) : nil,
-                        recovery: day?.recovery.map { Int($0.rounded()) },
-                        connected: model.live.connected,
-                        effort: day?.strain.map { Int($0.rounded()) }
-                    )
+                    let connected = model.live.connected
+                    let bpm = connected ? (model.bpm ?? model.live.heartRate) : nil
+                    let recovery = day?.recovery.map { Int($0.rounded()) }
+                    let effort = day?.strain.map { Int($0.rounded()) }
+                    Task {
+                        await liveActivity.update(bpm: bpm, recovery: recovery,
+                                                  connected: connected, effort: effort)
+                    }
                 }
                 // End the Live Activity the moment the link drops, even if no further HR tick arrives.
                 .onReceive(model.live.$connected) { isConnected in
                     let day = model.repo.days.last(where: { $0.recovery != nil })
-                    liveActivity.update(
-                        bpm: isConnected ? (model.bpm ?? model.live.heartRate) : nil,
-                        recovery: day?.recovery.map { Int($0.rounded()) },
-                        connected: isConnected,
-                        effort: day?.strain.map { Int($0.rounded()) }
-                    )
+                    let bpm = isConnected ? (model.bpm ?? model.live.heartRate) : nil
+                    let recovery = day?.recovery.map { Int($0.rounded()) }
+                    let effort = day?.strain.map { Int($0.rounded()) }
+                    Task {
+                        await liveActivity.update(bpm: bpm, recovery: recovery,
+                                                  connected: isConnected, effort: effort)
+                    }
                 }
                 // #581: the `noop://import-health` deep link the iOS Shortcut opens after building the
                 // HealthKit-free payload. Filter on the host so other future schemes don't trip the

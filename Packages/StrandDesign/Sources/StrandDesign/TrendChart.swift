@@ -13,7 +13,7 @@ import Charts
 // ramp for sleep, the teal HRV scale for HRV, the amber strain ramp for strain.
 
 /// One point on a trend line.
-public struct TrendPoint: Identifiable, Sendable {
+public nonisolated struct TrendPoint: Identifiable, Sendable {
     public var date: Date
     public var value: Double
 

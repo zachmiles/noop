@@ -16,11 +16,13 @@ settings:
     # SAME value — they must match or iOS warns "extension version must match parent app" (#416).
     # macOS sets its own CFBundleVersion on the Strand target and is unaffected by this.
     CURRENT_PROJECT_VERSION: "155"
-    SWIFT_VERSION: "5.0"
+    SWIFT_VERSION: "6.0"
     # Emit localizable strings so Xcode auto-extracts every LocalizedStringKey into the
     # String Catalog on build (the English (US) base entries).
     SWIFT_EMIT_LOC_STRINGS: YES
-    SWIFT_STRICT_CONCURRENCY: minimal
+    SWIFT_STRICT_CONCURRENCY: complete
+    SWIFT_APPROACHABLE_CONCURRENCY: YES
+    SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
     DEVELOPMENT_TEAM: J8ZJC82CT8
     CODE_SIGN_STYLE: Automatic
     # Single source of truth for the App Group id shared by the iOS app + its widget / Live Activity

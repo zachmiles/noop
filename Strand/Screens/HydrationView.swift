@@ -93,11 +93,11 @@ struct HydrationView: View {
     }
 
     /// One quick-add button using the secondary (no-gold) NoopButton style. Logs the amount and refreshes.
-    private func logButton(_ title: LocalizedStringKey, systemImage: String, ml: Int) -> some View {
-        NoopButton(title, systemImage: systemImage, kind: .secondary, fullWidth: true) {
+    private func logButton(_ title: String, systemImage: String, ml: Int) -> some View {
+        NoopButton(LocalizedStringKey(title), systemImage: systemImage, kind: .secondary, fullWidth: true) {
             Task { await add(ml: ml) }
         }
-        .accessibilityLabel("Log \(title)")
+        .accessibilityLabel(Text("Log \(title)"))
     }
 
     // MARK: - 7-day mini history (flat bars, today on the right)

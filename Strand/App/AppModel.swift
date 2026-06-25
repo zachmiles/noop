@@ -5,7 +5,7 @@ import WhoopStore
 import StrandAnalytics
 import StrandImport
 #if os(iOS)
-import UserNotifications
+@preconcurrency import UserNotifications
 #endif
 
 /// Data source currently running an import from the Data Sources screen.
@@ -886,7 +886,7 @@ final class AppModel: ObservableObject {
             content.title = title
             content.body = body
             content.sound = .default
-            center.add(UNNotificationRequest(identifier: identifier, content: content, trigger: nil))
+            UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: identifier, content: content, trigger: nil))
         }
     }
     #endif
@@ -1027,7 +1027,7 @@ final class AppModel: ObservableObject {
         let mark = SleepMark(type: .bedtime, at: date)
         Task { [weak self] in
             guard let self, let store = await self.repo.storeHandle() else { return }
-            try? await store.upsertMetricSeries([mark.metricPoint], deviceId: self.repo.deviceId)
+            _ = try? await store.upsertMetricSeries([mark.metricPoint], deviceId: self.repo.deviceId)
         }
     }
 
@@ -1361,7 +1361,7 @@ final class AppModel: ObservableObject {
     /// `export.zip` parked there was the runaway "Documents & Data" growth in #590 (one import → the
     /// store rows AND a permanent ~19 GB Inbox duplicate the OS never reclaims). Sendable so it can
     /// cross the actor boundary.
-    struct ImportFile: Sendable {
+    nonisolated struct ImportFile: Sendable {
         let url: URL
         private let temp: URL?
         /// The picker's `asCopy:true` drop in `Documents/Inbox/`, deleted on cleanup so it can't
@@ -1528,9 +1528,9 @@ final class AppModel: ObservableObject {
                     step: "Parsing Apple Health export",
                     detail: "Streaming records, sleep intervals and workouts…")
                 let deviceId = appleDeviceId
-                let progressHandler: (AppleHealthImport.ProgressEvent) -> Void = { [weak self] event in
-                    Task { @MainActor [weak self] in
-                        self?.applyAppleHealthImportProgress(event)
+                let progressHandler: @Sendable (AppleHealthImport.ProgressEvent) -> Void = { [weak model = self] event in
+                    Task { @MainActor [weak model] in
+                        model?.applyAppleHealthImportProgress(event)
                     }
                 }
                 let outcome = try await Task.detached(priority: .utility) {

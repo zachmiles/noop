@@ -12,7 +12,7 @@ import WhoopStore
 ///
 /// Classification order matters: "-noop" is checked BEFORE "whoop" because the computed id
 /// "my-whoop-noop" also contains the substring "whoop".
-enum WorkoutSource: Equatable {
+nonisolated enum WorkoutSource: Equatable {
     case whoop, apple, detected, manual, lifting, activityFile
 
     /// Canonical Apple Health source id written by new imports. The early rows used the underscore

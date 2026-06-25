@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 import StrandDesign
 
 // MARK: - WatchBreatheView — a wrist-native guided breathing session
@@ -132,7 +133,7 @@ struct WatchBreatheView: View {
             guard running else { return }
             sessionSeconds += 1
         }
-        .onChange(of: pace) { _ in
+        .onChange(of: pace) { _, _ in
             // Re-arm from the inhale at the new pace without an extra buzz (the user just tapped a pill).
             if running { armPhase(.inhale, from: Date(), buzz: false) }
         }

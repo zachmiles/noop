@@ -4,19 +4,19 @@ import Foundation
 // Phase E and WhoopStore depend on these EXACT shapes. ts is wall-clock unix seconds
 // EXCEPT inside extractStreams' inputs; the structs themselves always carry wall-clock ts.
 
-public struct HRSample: Equatable, Codable {
+public struct HRSample: Equatable, Codable, Sendable {
     public let ts: Int          // wall-clock unix seconds
     public let bpm: Int
     public init(ts: Int, bpm: Int) { self.ts = ts; self.bpm = bpm }
 }
 
-public struct RRInterval: Equatable, Codable {
+public struct RRInterval: Equatable, Codable, Sendable {
     public let ts: Int          // wall-clock unix seconds
     public let rrMs: Int
     public init(ts: Int, rrMs: Int) { self.ts = ts; self.rrMs = rrMs }
 }
 
-public struct WhoopEvent: Equatable, Codable {
+public struct WhoopEvent: Equatable, Codable, Sendable {
     public let ts: Int          // real unix seconds (event RTC; never offset)
     public let kind: String
     public let payload: [String: ParsedValue]
@@ -25,7 +25,7 @@ public struct WhoopEvent: Equatable, Codable {
     }
 }
 
-public struct BatterySample: Equatable, Codable {
+public struct BatterySample: Equatable, Codable, Sendable {
     public let ts: Int          // unix seconds — event RTC for BATTERY_LEVEL events, else wallClockRef
     public let soc: Double?
     public let mv: Int?
@@ -38,7 +38,7 @@ public struct BatterySample: Equatable, Codable {
 // MARK: - type-47 HISTORICAL_DATA biometric rows. JSON keys MUST match
 // biometric_streams_golden.json exactly (see extract_historical_streams).
 
-public struct SpO2Sample: Equatable, Codable {
+public struct SpO2Sample: Equatable, Codable, Sendable {
     public let ts: Int
     public let red: Int
     public let ir: Int
@@ -48,7 +48,7 @@ public struct SpO2Sample: Equatable, Codable {
     }
 }
 
-public struct SkinTempSample: Equatable, Codable {
+public struct SkinTempSample: Equatable, Codable, Sendable {
     public let ts: Int
     public let raw: Int
     public let unit: String     // "raw_adc"
@@ -57,7 +57,7 @@ public struct SkinTempSample: Equatable, Codable {
     }
 }
 
-public struct RespSample: Equatable, Codable {
+public struct RespSample: Equatable, Codable, Sendable {
     public let ts: Int
     public let raw: Int
     public let unit: String     // "raw_adc"
@@ -66,7 +66,7 @@ public struct RespSample: Equatable, Codable {
     }
 }
 
-public struct GravitySample: Equatable, Codable {
+public struct GravitySample: Equatable, Codable, Sendable {
     public let ts: Int
     public let x: Double
     public let y: Double
@@ -84,7 +84,7 @@ public struct GravitySample: Equatable, Codable {
 /// 0=still, 1=walk, 2=run; nil when the byte was 0xFF/invalid or absent. A lightweight, no-cloud
 /// activity readout that rides alongside the counter. Optional + defaulted so existing call sites and
 /// the persisted store (which carries only ts/counter today) are unchanged.
-public struct StepSample: Equatable, Codable {
+public struct StepSample: Equatable, Codable, Sendable {
     public let ts: Int
     public let counter: Int
     public let activityClass: Int?
@@ -93,7 +93,7 @@ public struct StepSample: Equatable, Codable {
     }
 }
 
-public struct Streams: Equatable, Codable {
+public struct Streams: Equatable, Codable, Sendable {
     public var hr: [HRSample]
     public var rr: [RRInterval]
     public var spo2: [SpO2Sample]

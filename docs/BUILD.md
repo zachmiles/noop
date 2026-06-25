@@ -75,7 +75,7 @@ as a binary.
 | Tool      | Version used in this repo | Notes |
 |-----------|---------------------------|-------|
 | macOS     | 13 (Ventura) or newer     | Deployment target is macOS 13.0 |
-| Xcode     | 26.x (Swift 6.3 toolchain) | Provides `xcodebuild` and the macOS SDK |
+| Xcode     | 26+ (Swift 6.2+ toolchain) | Provides Apple build tooling and the macOS SDK |
 | XcodeGen  | 2.45+                     | Generates `Strand.xcodeproj` from `project.yml` |
 
 Install XcodeGen via Homebrew:

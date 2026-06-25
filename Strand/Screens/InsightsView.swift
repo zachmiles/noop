@@ -314,7 +314,7 @@ struct InsightsView: View {
     /// The merged DailyMetric column backing an outcome key, for days the imported metricSeries
     /// doesn't cover (strap-only users). sleep_performance has no daily column, so it stays
     /// import-only — never seeded here.
-    private static func dailyOutcome(key: String, day d: DailyMetric) -> Double? {
+    private nonisolated static func dailyOutcome(key: String, day d: DailyMetric) -> Double? {
         switch key {
         case "recovery": return d.recovery
         case "hrv":      return d.avgHrv
@@ -332,7 +332,7 @@ struct InsightsView: View {
 
     // `internal` (not private) so the Workouts post-log note (#439) reuses the exact same input
     // shaping rather than duplicating it — one source of truth for [sport: days] / [day: Charge].
-    static func computeActivityCosts(workouts: [WorkoutRow], days: [DailyMetric]) -> [ActivityCost] {
+    nonisolated static func computeActivityCosts(workouts: [WorkoutRow], days: [DailyMetric]) -> [ActivityCost] {
         // Local-day offset so the activity day key lands on the SAME calendar as DailyMetric.day
         // (which IntelligenceEngine/WhoopImporter both bucket by local midnight, #277).
         let tzOffset = TimeZone.current.secondsFromGMT()

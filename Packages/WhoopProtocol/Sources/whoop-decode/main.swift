@@ -38,6 +38,14 @@ struct CaptureRecord: Decodable {
 
 enum FamilyMode { case whoop4, whoop5, auto }
 
+struct Options {
+    var familyMode: FamilyMode = .auto
+    var jsonOut = false
+    var rawOnly = false
+    var hexArgs: [String] = []
+    var filePath: String?
+}
+
 // MARK: - Arg parsing (dependency-free)
 
 func die(_ msg: String) -> Never {
@@ -59,11 +67,7 @@ frames from --hex. Family defaults to auto: derived per-frame from `char`
 (fd4b…→whoop5, 6108…→whoop4), falling back to whoop5.
 """
 
-var familyMode: FamilyMode = .auto
-var jsonOut = false
-var rawOnly = false
-var hexArgs: [String] = []
-var filePath: String?
+var options = Options()
 
 var args = Array(CommandLine.arguments.dropFirst())
 var i = 0
@@ -72,27 +76,27 @@ while i < args.count {
     switch a {
     case "-h", "--help":
         print(helpText); exit(0)
-    case "--json": jsonOut = true
-    case "--raw-only": rawOnly = true
+    case "--json": options.jsonOut = true
+    case "--raw-only": options.rawOnly = true
     case "--family":
         i += 1
         guard i < args.count else { die("--family needs a value") }
         switch args[i] {
-        case "whoop4": familyMode = .whoop4
-        case "whoop5": familyMode = .whoop5
-        case "auto": familyMode = .auto
+        case "whoop4": options.familyMode = .whoop4
+        case "whoop5": options.familyMode = .whoop5
+        case "auto": options.familyMode = .auto
         default: die("--family must be whoop4|whoop5|auto")
         }
     case "--hex":
         i += 1
         // Consume following non-flag tokens as hex frames.
         while i < args.count && !args[i].hasPrefix("--") {
-            hexArgs.append(args[i]); i += 1
+            options.hexArgs.append(args[i]); i += 1
         }
         continue
     default:
         if a.hasPrefix("-") { die("unknown option: \(a)") }
-        filePath = a
+        options.filePath = a
     }
     i += 1
 }
@@ -108,9 +112,9 @@ func loadJSON(_ data: Data) -> [CaptureRecord] {
 }
 
 var records: [CaptureRecord] = []
-if !hexArgs.isEmpty {
-    records = hexArgs.map { CaptureRecord(hex: $0, char: nil, hr: nil, tsMs: nil) }
-} else if let path = filePath {
+if !options.hexArgs.isEmpty {
+    records = options.hexArgs.map { CaptureRecord(hex: $0, char: nil, hr: nil, tsMs: nil) }
+} else if let path = options.filePath {
     guard let data = FileManager.default.contents(atPath: path) else { die("cannot read file: \(path)") }
     records = loadJSON(data)
 } else {
@@ -134,8 +138,8 @@ func bytes(fromHex hex: String) -> [UInt8]? {
     return out
 }
 
-func resolveFamily(_ rec: CaptureRecord) -> DeviceFamily {
-    switch familyMode {
+func resolveFamily(_ rec: CaptureRecord, mode: FamilyMode) -> DeviceFamily {
+    switch mode {
     case .whoop4: return .whoop4
     case .whoop5: return .whoop5
     case .auto:
@@ -186,15 +190,15 @@ for (n, rec) in records.enumerated() {
         FileHandle.standardError.write(Data("skipping bad hex at index \(n)\n".utf8))
         continue
     }
-    let family = resolveFamily(rec)
+    let family = resolveFamily(rec, mode: options.familyMode)
     let parsed = parseFrame(frame, family: family)
     total += 1
     if parsed.ok { okCount += 1 }
     typeCounts[parsed.typeName, default: 0] += 1
 
-    if rawOnly && parsed.ok { continue }
+    if options.rawOnly && parsed.ok { continue }
 
-    if jsonOut {
+    if options.jsonOut {
         decodedOut.append(DecodedOut(char: rec.char, hr: rec.hr, tsMs: rec.tsMs,
                                      family: family.rawValue, frame: parsed))
         continue
@@ -215,7 +219,7 @@ for (n, rec) in records.enumerated() {
     }
 }
 
-if jsonOut {
+if options.jsonOut {
     let enc = JSONEncoder()
     enc.outputFormatting = [.prettyPrinted, .withoutEscapingSlashes]
     if let data = try? enc.encode(decodedOut), let s = String(data: data, encoding: .utf8) {

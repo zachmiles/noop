@@ -5,13 +5,13 @@ import StrandImport
 /// Maps a parsed + aggregated Apple Health export into the on-device store under its own
 /// source id ("apple-health"), so it sits BESIDE Whoop for the per-source pages and cross-source
 /// consensus. Populates appleDaily, dailyMetric, the generic metricSeries, and workouts.
-enum AppleHealthImport {
+nonisolated enum AppleHealthImport {
     struct Outcome {
         var summary: ImportSummary
         var profile: AppleHealthProfile?
     }
 
-    enum ProgressEvent {
+    enum ProgressEvent: Sendable {
         case cacheLookup
         case cacheHit(days: Int, records: Int)
         case cacheMiss
@@ -37,7 +37,7 @@ enum AppleHealthImport {
 
     @discardableResult
     static func importExport(url: URL, into store: WhoopStore, deviceId: String,
-                             progress: ((ProgressEvent) -> Void)? = nil) async throws -> Outcome {
+                             progress: (@Sendable (ProgressEvent) -> Void)? = nil) async throws -> Outcome {
         progress?(.cacheLookup)
         let fingerprint = try cacheFingerprint(for: url)
         if let cached = loadCache(fingerprint: fingerprint) {
@@ -110,7 +110,7 @@ enum AppleHealthImport {
     }
 
     private static func write(_ payload: CachePayload, into store: WhoopStore, deviceId: String,
-                              progress: ((ProgressEvent) -> Void)?) async throws {
+                              progress: (@Sendable (ProgressEvent) -> Void)?) async throws {
         progress?(.writing(step: "Writing daily Apple Health rows", completed: 0, total: 5))
         try await store.upsertAppleDaily(payload.appleRows, deviceId: deviceId)
         progress?(.writing(step: "Writing sleep and health summaries", completed: 1, total: 5))

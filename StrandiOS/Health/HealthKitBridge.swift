@@ -247,15 +247,13 @@ final class HealthKitBridge: ObservableObject {
                 observerQueries[key] = nil
             }
             let observer = HKObserverQuery(sampleType: type, predicate: nil) { [weak self] _, completion, _ in
-                // HealthKit invokes this on a background queue. Hop to the main actor (the bridge is
-                // @MainActor and `sync` mutates published state), run the incremental catch-up, then
-                // ALWAYS call completion so HealthKit keeps delivering. We don't tie completion to sync
-                // success: a transient store error shouldn't make HealthKit think we never handled the
-                // update and back off — the next foreground catch-up will reconcile.
+                // HealthKit invokes this on a background queue. Acknowledge delivery immediately so a
+                // transient store error can't make HealthKit think we never handled the update; the next
+                // foreground catch-up will reconcile anything the scheduled sync misses.
                 guard let self else { completion(); return }
+                completion()
                 Task { @MainActor in
                     await self.syncFromObserver(type: type)
-                    completion()
                 }
             }
             store.execute(observer)
@@ -348,60 +346,39 @@ final class HealthKitBridge: ObservableObject {
 
         var byDay: [String: DayAgg] = [:]
         func agg(_ day: String) -> DayAgg { byDay[day] ?? DayAgg() }
+        func apply(_ values: [(day: String, value: Double)], _ update: (inout DayAgg, Double) -> Void) {
+            for (day, value) in values {
+                var a = agg(day)
+                update(&a, value)
+                byDay[day] = a
+            }
+        }
 
         // Quantity aggregates per day.
-        await collect(.restingHeartRate, unit: HKUnit.count().unitDivided(by: .minute()), start: start, end: end, op: .discreteAverage) { day, v in
-            var a = agg(day); a.restingHr = v; byDay[day] = a
-        }
-        await collect(.heartRate, unit: HKUnit.count().unitDivided(by: .minute()), start: start, end: end, op: .discreteAverage) { day, v in
-            var a = agg(day); a.avgHr = v; byDay[day] = a
-        }
-        await collect(.heartRate, unit: HKUnit.count().unitDivided(by: .minute()), start: start, end: end, op: .discreteMax) { day, v in
-            var a = agg(day); a.maxHr = v; byDay[day] = a
-        }
-        await collect(.heartRateVariabilitySDNN, unit: .secondUnit(with: .milli), start: start, end: end, op: .discreteAverage) { day, v in
-            var a = agg(day); a.hrv = v; byDay[day] = a
-        }
-        await collect(.oxygenSaturation, unit: .percent(), start: start, end: end, op: .discreteAverage) { day, v in
-            var a = agg(day); a.spo2 = v * 100; byDay[day] = a   // 0…1 → percent
-        }
-        await collect(.respiratoryRate, unit: HKUnit.count().unitDivided(by: .minute()), start: start, end: end, op: .discreteAverage) { day, v in
-            var a = agg(day); a.respRate = v; byDay[day] = a
-        }
-        await collect(.stepCount, unit: .count(), start: start, end: end, op: .cumulativeSum) { day, v in
-            var a = agg(day); a.steps = v; byDay[day] = a
-        }
-        await collect(.activeEnergyBurned, unit: .kilocalorie(), start: start, end: end, op: .cumulativeSum) { day, v in
-            var a = agg(day); a.activeKcal = v; byDay[day] = a
-        }
-        await collect(.basalEnergyBurned, unit: .kilocalorie(), start: start, end: end, op: .cumulativeSum) { day, v in
-            var a = agg(day); a.basalKcal = v; byDay[day] = a
-        }
-        await collect(.vo2Max, unit: HKUnit(from: "ml/kg*min"), start: start, end: end, op: .discreteAverage) { day, v in
-            var a = agg(day); a.vo2max = v; byDay[day] = a
-        }
+        apply(await collect(.restingHeartRate, unit: HKUnit.count().unitDivided(by: .minute()), start: start, end: end, op: .discreteAverage)) { $0.restingHr = $1 }
+        apply(await collect(.heartRate, unit: HKUnit.count().unitDivided(by: .minute()), start: start, end: end, op: .discreteAverage)) { $0.avgHr = $1 }
+        apply(await collect(.heartRate, unit: HKUnit.count().unitDivided(by: .minute()), start: start, end: end, op: .discreteMax)) { $0.maxHr = $1 }
+        apply(await collect(.heartRateVariabilitySDNN, unit: .secondUnit(with: .milli), start: start, end: end, op: .discreteAverage)) { $0.hrv = $1 }
+        apply(await collect(.oxygenSaturation, unit: .percent(), start: start, end: end, op: .discreteAverage)) { $0.spo2 = $1 * 100 }   // 0…1 → percent
+        apply(await collect(.respiratoryRate, unit: HKUnit.count().unitDivided(by: .minute()), start: start, end: end, op: .discreteAverage)) { $0.respRate = $1 }
+        apply(await collect(.stepCount, unit: .count(), start: start, end: end, op: .cumulativeSum)) { $0.steps = $1 }
+        apply(await collect(.activeEnergyBurned, unit: .kilocalorie(), start: start, end: end, op: .cumulativeSum)) { $0.activeKcal = $1 }
+        apply(await collect(.basalEnergyBurned, unit: .kilocalorie(), start: start, end: end, op: .cumulativeSum)) { $0.basalKcal = $1 }
+        apply(await collect(.vo2Max, unit: HKUnit(from: "ml/kg*min"), start: start, end: end, op: .discreteAverage)) { $0.vo2max = $1 }
 
         // Body composition — READ-ONLY import under the apple-health source (#20). Weight, lean mass
         // and BMI are point-in-time readings, so take the latest-of-day; body-fat reads fine as a
         // daily average. Body-fat HealthKit gives a 0…1 fraction, scaled to percent like spo2 above.
-        await collect(.bodyMass, unit: .gramUnit(with: .kilo), start: start, end: end, op: .mostRecent) { day, v in
-            var a = agg(day); a.weightKg = v; byDay[day] = a
-        }
-        await collect(.bodyFatPercentage, unit: .percent(), start: start, end: end, op: .discreteAverage) { day, v in
-            var a = agg(day); a.bodyFatPct = v * 100; byDay[day] = a   // 0…1 → percent
-        }
-        await collect(.leanBodyMass, unit: .gramUnit(with: .kilo), start: start, end: end, op: .mostRecent) { day, v in
-            var a = agg(day); a.leanMassKg = v; byDay[day] = a
-        }
-        await collect(.bodyMassIndex, unit: .count(), start: start, end: end, op: .mostRecent) { day, v in
-            var a = agg(day); a.bmi = v; byDay[day] = a
-        }
+        apply(await collect(.bodyMass, unit: .gramUnit(with: .kilo), start: start, end: end, op: .mostRecent)) { $0.weightKg = $1 }
+        apply(await collect(.bodyFatPercentage, unit: .percent(), start: start, end: end, op: .discreteAverage)) { $0.bodyFatPct = $1 * 100 }   // 0…1 → percent
+        apply(await collect(.leanBodyMass, unit: .gramUnit(with: .kilo), start: start, end: end, op: .mostRecent)) { $0.leanMassKg = $1 }
+        apply(await collect(.bodyMassIndex, unit: .count(), start: start, end: end, op: .mostRecent)) { $0.bmi = $1 }
 
         // Sleep minutes per day (asleep stages summed; attributed to wake day).
-        await collectSleep(start: start, end: end) { day, asleepMin, deepMin, remMin, coreMin in
-            var a = agg(day)
-            a.asleepMin = asleepMin; a.deepMin = deepMin; a.remMin = remMin; a.coreMin = coreMin
-            byDay[day] = a
+        for sleep in await collectSleep(start: start, end: end) {
+            var a = agg(sleep.day)
+            a.asleepMin = sleep.asleepMin; a.deepMin = sleep.deepMin; a.remMin = sleep.remMin; a.coreMin = sleep.coreMin
+            byDay[sleep.day] = a
         }
 
         // Build + upsert the store rows under the apple-health source.
@@ -720,6 +697,14 @@ final class HealthKitBridge: ObservableObject {
         var asleepMin: Double?; var deepMin: Double?; var remMin: Double?; var coreMin: Double?
     }
 
+    private struct SleepAgg: Sendable {
+        var day: String
+        var asleepMin: Double?
+        var deepMin: Double?
+        var remMin: Double?
+        var coreMin: Double?
+    }
+
     /// Excludes NOOP's own write-back samples from reads, so the two-way sync never reads its own
     /// output back in as "apple-health" data — which would make the strap and "Apple Health" plot the
     /// same line for a strap-only user, and bias the apple-health average for someone who also has a
@@ -729,19 +714,20 @@ final class HealthKitBridge: ObservableObject {
     }
 
     private func collect(_ id: HKQuantityTypeIdentifier, unit: HKUnit, start: Date, end: Date,
-                         op: HKStatisticsOptions, sink: @escaping (String, Double) -> Void) async {
-        guard let type = HKQuantityType.quantityType(forIdentifier: id) else { return }
+                         op: HKStatisticsOptions) async -> [(day: String, value: Double)] {
+        guard let type = HKQuantityType.quantityType(forIdentifier: id) else { return [] }
         let cal = Calendar.current
         let anchor = cal.startOfDay(for: start)
         let predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
             HKQuery.predicateForSamples(withStart: start, end: end, options: .strictStartDate),
             Self.notNoopAuthored,
         ])
-        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+        return await withCheckedContinuation { (cont: CheckedContinuation<[(day: String, value: Double)], Never>) in
             let q = HKStatisticsCollectionQuery(quantityType: type, quantitySamplePredicate: predicate,
                                                 options: op, anchorDate: anchor,
                                                 intervalComponents: DateComponents(day: 1))
             q.initialResultsHandler = { _, results, _ in
+                var values: [(day: String, value: Double)] = []
                 results?.enumerateStatistics(from: start, to: end) { stats, _ in
                     let q: HKQuantity?
                     switch op {
@@ -751,22 +737,23 @@ final class HealthKitBridge: ObservableObject {
                     case .mostRecent:         q = stats.mostRecentQuantity()
                     default:                 q = stats.averageQuantity()
                     }
-                    if let q { sink(HealthKitBridge.dayString(stats.startDate), q.doubleValue(for: unit)) }
+                    if let q {
+                        values.append((HealthKitBridge.dayString(stats.startDate), q.doubleValue(for: unit)))
+                    }
                 }
-                cont.resume()
+                cont.resume(returning: values)
             }
             store.execute(q)
         }
     }
 
-    private func collectSleep(start: Date, end: Date,
-                              sink: @escaping (String, Double?, Double?, Double?, Double?) -> Void) async {
-        guard let type = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else { return }
+    private func collectSleep(start: Date, end: Date) async -> [SleepAgg] {
+        guard let type = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else { return [] }
         let predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
             HKQuery.predicateForSamples(withStart: start, end: end, options: []),
             Self.notNoopAuthored,
         ])
-        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+        return await withCheckedContinuation { (cont: CheckedContinuation<[SleepAgg], Never>) in
             let q = HKSampleQuery(sampleType: type, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, samples, _ in
                 var asleep: [String: Double] = [:], deep: [String: Double] = [:]
                 var rem: [String: Double] = [:], core: [String: Double] = [:]
@@ -784,10 +771,10 @@ final class HealthKitBridge: ObservableObject {
                         break
                     }
                 }
-                for day in Set(asleep.keys) {
-                    sink(day, asleep[day], deep[day], rem[day], core[day])
+                let values = asleep.keys.map { day in
+                    SleepAgg(day: day, asleepMin: asleep[day], deepMin: deep[day], remMin: rem[day], coreMin: core[day])
                 }
-                cont.resume()
+                cont.resume(returning: values)
             }
             store.execute(q)
         }

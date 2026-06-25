@@ -12,7 +12,7 @@ import Foundation
 // The Android side mirrors this exactly in Units.kt + NoopPrefs.
 
 /// The length+mass unit system. Temperature has its own override (see `UnitPrefs.temperature`).
-enum UnitSystem: String, CaseIterable, Identifiable {
+nonisolated enum UnitSystem: String, CaseIterable, Identifiable {
     case metric
     case imperial
     var id: String { rawValue }
@@ -23,7 +23,7 @@ enum UnitSystem: String, CaseIterable, Identifiable {
 }
 
 /// Temperature display unit. Kept separate from `UnitSystem` so it can be overridden on its own.
-enum TemperatureUnit: String, CaseIterable, Identifiable {
+nonisolated enum TemperatureUnit: String, CaseIterable, Identifiable {
     case celsius
     case fahrenheit
     var id: String { rawValue }
@@ -32,7 +32,7 @@ enum TemperatureUnit: String, CaseIterable, Identifiable {
 /// How the Effort score is displayed (#268). NOOP's Effort is stored 0–100 (StrainScorer.maxStrain = 100);
 /// people coming from WHOOP often think in its 0–21 Day Strain axis, so this purely cosmetic toggle lets
 /// the SAME stored value be shown on either scale. Default is NOOP's own 0–100 — the data never changes.
-enum EffortScale: String, CaseIterable, Identifiable {
+nonisolated enum EffortScale: String, CaseIterable, Identifiable {
     /// NOOP's native 0–100 axis (the stored value, one decimal).
     case hundred
     /// WHOOP's 0–21 Day Strain axis — the stored 0–100 value rescaled down for display only.
@@ -42,7 +42,7 @@ enum EffortScale: String, CaseIterable, Identifiable {
 
 /// UserDefaults keys for the two unit preferences. Public-ish (internal) so `SettingsView`'s
 /// `@AppStorage(UnitPrefs.systemKey)` and the formatter read the SAME key — no drift.
-enum UnitPrefs {
+nonisolated enum UnitPrefs {
     static let systemKey = "units.system"
     /// Temperature override. Empty string = "match the length/mass system" (the default).
     static let temperatureKey = "units.temperature"

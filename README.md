@@ -442,7 +442,7 @@ Palette, typography, motion, and reusable components/charts (`RecoveryRing`,
 
 ## Quickstart (macOS)
 
-**Requirements:** macOS 13+, Xcode 15+ (Swift 5.9), and a Mac with Bluetooth. To
+**Requirements:** macOS 13+, Xcode 26+ (Swift 6.2+), and a Mac with Bluetooth. To
 pair live, you need your own WHOOP strap; to just explore, you can import a CSV /
 Apple Health export instead.
 

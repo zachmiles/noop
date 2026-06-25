@@ -174,7 +174,7 @@ public struct RecoveryRing: View {
 // MARK: - Arc Shape
 
 /// An open 240° gauge arc that fills clockwise from the start angle.
-public struct RecoveryArc: Shape {
+public nonisolated struct RecoveryArc: Shape {
     public var startAngle: Angle
     public var spanDegrees: Double
     public var fraction: Double

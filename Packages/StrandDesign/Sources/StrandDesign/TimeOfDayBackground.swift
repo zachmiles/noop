@@ -209,7 +209,7 @@ private struct AtmosphereWash: View {
 
 /// A crescent: the full disc minus a disc offset up-and-right. Pure geometry, even-odd filled,
 /// so it renders as a crisp sliver with no blur/bloom.
-private struct CrescentMoon: Shape {
+private nonisolated struct CrescentMoon: Shape {
     func path(in rect: CGRect) -> Path {
         var p = Path()
         p.addEllipse(in: rect)

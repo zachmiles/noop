@@ -1,5 +1,11 @@
-// swift-tools-version: 5.9
+// swift-tools-version: 6.2
 import PackageDescription
+
+let swiftSettings: [SwiftSetting] = [
+    .swiftLanguageMode(.v6),
+    .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
+    .enableUpcomingFeature("InferIsolatedConformances"),
+]
 
 let package = Package(
     name: "WhoopStore",
@@ -18,11 +24,13 @@ let package = Package(
             dependencies: [
                 "WhoopProtocol",
                 .product(name: "GRDB", package: "GRDB.swift"),
-            ]
+            ],
+            swiftSettings: swiftSettings
         ),
         .testTarget(
             name: "WhoopStoreTests",
-            dependencies: ["WhoopStore"]
+            dependencies: ["WhoopStore"],
+            swiftSettings: swiftSettings
         ),
     ]
 )

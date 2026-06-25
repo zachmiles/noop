@@ -67,7 +67,7 @@ enum DailyMetricSource: Equatable, Sendable {
     case appleHealth
     case localCache
 
-    var vitalPriority: Int {
+    nonisolated var vitalPriority: Int {
         switch self {
         case .whoopImport:  return 0
         case .noopComputed: return 1
@@ -204,7 +204,7 @@ final class Repository: ObservableObject {
     /// Canonical source ids the resolver knows how to cross-reference. The strap's actual id is
     /// `deviceId` (and its computed sibling `deviceId + "-noop"`); these are the FIXED ids.
     static let whoopSource = "my-whoop"
-    static let appleHealthSource = "apple-health"
+    nonisolated static let appleHealthSource = "apple-health"
     static let healthConnectSource = "health-connect"
     static let renphoScaleSource = "renpho-scale"
 
@@ -888,7 +888,7 @@ final class Repository: ObservableObject {
 
         let points = Self.appleProjectionPoints(from: batch)
         if !points.isEmpty {
-            try? await store.upsertMetricSeries(points, deviceId: Self.appleHealthSource)
+            _ = try? await store.upsertMetricSeries(points, deviceId: Self.appleHealthSource)
         }
         let newCursor = batch.last?.day ?? cursor
         if let newCursor {
@@ -1732,7 +1732,7 @@ final class Repository: ObservableObject {
 }
 
 private extension DailyMetric {
-    func withEfficiencyFallback(_ fallback: Double) -> DailyMetric {
+    nonisolated func withEfficiencyFallback(_ fallback: Double) -> DailyMetric {
         DailyMetric(
             day: day,
             totalSleepMin: totalSleepMin,
@@ -1757,7 +1757,7 @@ private extension DailyMetric {
     /// A copy of self where every nil field is backfilled from `fallback`. Used by the field-by-field
     /// daily merge so an imported export keeps its own values while a computed row fills the gaps it
     /// doesn't carry (e.g. on-device Charge / skin-temp deviation / activity totals).
-    func fillingNilFields(from fallback: DailyMetric) -> DailyMetric {
+    nonisolated func fillingNilFields(from fallback: DailyMetric) -> DailyMetric {
         DailyMetric(
             day: day,
             totalSleepMin: totalSleepMin ?? fallback.totalSleepMin,
@@ -1783,7 +1783,7 @@ private extension DailyMetric {
     /// hand-edited night's computed sleep figures win over the import for that day (#509). Only the sleep
     /// columns move; every other field (recovery/strain/HRV/RHR/activity/in-sleep vitals) is left as-is, so
     /// the import still wins for non-sleep metrics on the edited day.
-    func takingSleepFields(from source: DailyMetric) -> DailyMetric {
+    nonisolated func takingSleepFields(from source: DailyMetric) -> DailyMetric {
         DailyMetric(
             day: day,
             totalSleepMin: source.totalSleepMin,

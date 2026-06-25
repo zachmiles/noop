@@ -14,7 +14,7 @@ import Foundation
 /// `Calibrating` flag set true. The watch UI must render that as "needs more data" (a dash + a small
 /// cal marker), NEVER a fabricated number. A score that simply has not been computed yet is also `nil`
 /// but with its flag false (missing data, not mid-calibration) and reads as a plain dash.
-public struct WatchScoreSnapshot: Codable, Equatable, Sendable {
+public nonisolated struct WatchScoreSnapshot: Codable, Equatable, Sendable {
     /// Charge (recovery), 0 to 100. `nil` when there is no earned number for the day.
     public var charge: Double?
     /// True when Charge is still calibrating (the baseline is not usable yet). When true, `charge` is
@@ -116,7 +116,7 @@ public struct WatchScoreSnapshot: Codable, Equatable, Sendable {
 
         // Preferred path: we know which day the scores describe. Compare day keys against "now" so the
         // label tracks the actual calendar day, not the build clock.
-        if let scoreDay, let scored = Self.dayKeyFormatter.date(from: scoreDay) {
+        if let scoreDay, let scored = Self.makeDayKeyFormatter().date(from: scoreDay) {
             if cal.isDateInToday(scored) { return "Today" }
             if cal.isDateInYesterday(scored) { return "Yesterday" }
             let days = cal.dateComponents([.day], from: cal.startOfDay(for: scored),
@@ -140,13 +140,13 @@ public struct WatchScoreSnapshot: Codable, Equatable, Sendable {
 
     /// Shared "YYYY-MM-DD" parser/formatter for `scoreDay`. Fixed locale + POSIX so it round-trips the
     /// phone's `Repository.localDayKey` keys identically regardless of the watch's region settings.
-    private static let dayKeyFormatter: DateFormatter = {
+    private static func makeDayKeyFormatter() -> DateFormatter {
         let f = DateFormatter()
         f.calendar = Calendar(identifier: .gregorian)
         f.locale = Locale(identifier: "en_US_POSIX")
         f.dateFormat = "yyyy-MM-dd"
         return f
-    }()
+    }
 
     /// Decode the last snapshot the phone wrote into the shared app group, if any.
     public static func load(from defaults: UserDefaults? = UserDefaults(suiteName: appGroupId)) -> WatchScoreSnapshot? {

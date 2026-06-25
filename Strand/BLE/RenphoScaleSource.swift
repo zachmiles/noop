@@ -64,8 +64,8 @@ public final class RenphoScaleSource: NSObject, ObservableObject {
     private static let epochOffset = 946_656_000
     private static let defaultVendorByte: UInt8 = 0xFF
     private static let guestUserId: UInt8 = 0xFE
-    private static let kilogramUnitByte: UInt8 = 0x01
-    private static let poundUnitByte: UInt8 = 0x02
+    nonisolated private static let kilogramUnitByte: UInt8 = 0x01
+    nonisolated private static let poundUnitByte: UInt8 = 0x02
 
     private let displayUnitByteProvider: () -> UInt8
     private let profileProvider: () -> Profile?

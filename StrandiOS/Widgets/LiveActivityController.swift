@@ -1,6 +1,6 @@
 #if os(iOS)
 import Foundation
-import ActivityKit
+@preconcurrency import ActivityKit
 
 /// Starts, updates, and ends the live-HR Live Activity. The activity appears on the Lock Screen and
 /// in the Dynamic Island while the strap is bonded and streaming heart rate.
@@ -26,7 +26,7 @@ final class LiveActivityController {
     /// Drive the activity from the latest live values. Lazily starts when the strap is CONNECTED (the
     /// live link, not the sticky "paired" flag) and a heart rate is present; ends the moment the link
     /// drops. Throttled to ~once every 2 s so we stay well under the Live Activity update budget.
-    func update(bpm: Int?, recovery: Int?, connected: Bool, effort: Int? = nil) {
+    func update(bpm: Int?, recovery: Int?, connected: Bool, effort: Int? = nil) async {
         guard authInfo.areActivitiesEnabled else { return }
 
         // Re-adopt an activity that outlived a previous app session. ActivityKit keeps Live Activities
@@ -40,7 +40,7 @@ final class LiveActivityController {
         // User opt-out (#336): if the in-app toggle is off, never start — and end any activity that's
         // already showing (the user just turned it off; this fires on the next ~1 Hz HR tick).
         guard UnitPrefs.liveActivityEnabled() else {
-            if activity != nil { Task { await end() } }
+            if activity != nil { await end() }
             return
         }
 
@@ -48,7 +48,7 @@ final class LiveActivityController {
         // "this strap is paired"), so keying off it left a frozen, fabricated "live" HR on the Lock
         // Screen / Dynamic Island indefinitely after the strap went out of range.
         if !connected {
-            Task { await end() }
+            await end()
             return
         }
         guard bpm != nil else { return }
@@ -60,7 +60,7 @@ final class LiveActivityController {
         if let activity {
             guard Date().timeIntervalSince(lastPush) > 2 else { return }
             lastPush = Date()
-            Task { await activity.update(ActivityContent(state: state, staleDate: staleDate)) }
+            await activity.update(ActivityContent(state: state, staleDate: staleDate))
         } else {
             // Set the start gate SYNCHRONOUSLY before any await so a second `update` arriving on the
             // main actor while `Activity.request` is still in flight bails here instead of issuing a

@@ -78,13 +78,13 @@ final class WatchLiveHR: ObservableObject {
     }
 
     /// Pull the newest sample out of a batch and publish its BPM. Reads can arrive on a background queue,
-    /// so publish on the main actor.
-    private func handle(_ samples: [HKSample]?) {
+    /// so only the state update hops to the main actor.
+    private nonisolated func handle(_ samples: [HKSample]?) {
         guard let latest = (samples as? [HKQuantitySample])?
             .max(by: { $0.endDate < $1.endDate }) else { return }
-        let value = latest.quantity.doubleValue(for: bpmUnit)
+        let value = latest.quantity.doubleValue(for: HKUnit.count().unitDivided(by: .minute()))
         let rounded = Int(value.rounded())
-        DispatchQueue.main.async {
+        Task { @MainActor in
             self.bpm = rounded
             self.denied = false
         }

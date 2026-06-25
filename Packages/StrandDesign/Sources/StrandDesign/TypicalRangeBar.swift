@@ -22,7 +22,7 @@ import SwiftUI
 
 /// A field of parallel 45° diagonal lines clipped to the shape's rect — the "typical range" texture.
 /// Spacing/inset are in points so the hatch density stays constant regardless of bar width.
-public struct DiagonalHatch: Shape {
+public nonisolated struct DiagonalHatch: Shape {
     /// Gap between hatch lines, in points.
     public var spacing: CGFloat
     public init(spacing: CGFloat = 5) { self.spacing = spacing }

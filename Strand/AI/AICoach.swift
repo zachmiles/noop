@@ -13,7 +13,7 @@ import StrandImport
 // key is set AND a question is asked. We never embed our own key, never auto-send, and only ever
 // transmit the small text context built in `buildContext()` + the running chat — no raw streams.
 //
-// Pure macOS: Foundation + URLSession + Security (Keychain). Compiles on macOS 13, Swift 5.
+// Pure macOS: Foundation + URLSession + Security (Keychain). Compiles on macOS 13, Swift 6.
 // Provider wire formats live in Providers/: OpenAI.swift, Anthropic.swift, Gemini.swift.
 
 /// One-line privacy note the UI should display verbatim near the composer / settings.

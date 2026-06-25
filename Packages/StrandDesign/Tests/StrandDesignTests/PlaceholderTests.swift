@@ -2,12 +2,14 @@ import XCTest
 import SwiftUI
 @testable import StrandDesign
 
-final class StrandDesignTests: XCTestCase {
+final nonisolated class StrandDesignTests: XCTestCase {
 
+    @MainActor
     func testVersion() {
         XCTAssertEqual(StrandDesign.version, "0.1.0")
     }
 
+    @MainActor
     func testHexParsing() {
         let c = Color(hex: "#0B0D12").rgbaComponents
         XCTAssertEqual(c.r, 0x0B / 255.0, accuracy: 0.01)
@@ -16,12 +18,14 @@ final class StrandDesignTests: XCTestCase {
         XCTAssertEqual(c.a, 1.0, accuracy: 0.001)
     }
 
+    @MainActor
     func testRecoveryGradientStops() {
         XCTAssertEqual(StrandPalette.recoveryStops.count, 5)
         XCTAssertEqual(StrandPalette.recoveryStops.first?.location, 0.0)
         XCTAssertEqual(StrandPalette.recoveryStops.last?.location, 1.0)
     }
 
+    @MainActor
     func testRecoveryColorEndpoints() {
         // Score 0 should equal the indigo start; 100 the mint end.
         let low = StrandPalette.recoveryColor(0).rgbaComponents
@@ -37,6 +41,7 @@ final class StrandDesignTests: XCTestCase {
         XCTAssertEqual(high.b, mint.b, accuracy: 0.02)
     }
 
+    @MainActor
     func testRecoveryColorClamps() {
         // Out of range clamps to endpoints rather than crashing.
         let below = StrandPalette.recoveryColor(-50).rgbaComponents
@@ -47,6 +52,7 @@ final class StrandDesignTests: XCTestCase {
         XCTAssertEqual(above.b, hundred.b, accuracy: 0.001)
     }
 
+    @MainActor
     func testRecoveryStateWords() {
         XCTAssertEqual(StrandPalette.recoveryState(10), "DEPLETED")
         XCTAssertEqual(StrandPalette.recoveryState(40), "LOW")
@@ -55,6 +61,7 @@ final class StrandDesignTests: XCTestCase {
         XCTAssertEqual(StrandPalette.recoveryState(95), "PEAK")
     }
 
+    @MainActor
     func testStrainColorScaleAndEndpoints() {
         // Effort samples the 0...100 ramp; endpoints match ember/magenta.
         let ember = StrandPalette.strainColor(0).rgbaComponents
@@ -65,6 +72,7 @@ final class StrandDesignTests: XCTestCase {
         XCTAssertEqual(magenta.b, end.b, accuracy: 0.02)
     }
 
+    @MainActor
     func testHRZoneColor() {
         XCTAssertEqual(StrandPalette.hrZoneColor(1).rgbaComponents.b,
                        StrandPalette.zone1.rgbaComponents.b, accuracy: 0.001)
@@ -75,6 +83,7 @@ final class StrandDesignTests: XCTestCase {
                        StrandPalette.zone5.rgbaComponents.r, accuracy: 0.001)
     }
 
+    @MainActor
     func testSleepStageColorMapping() {
         XCTAssertEqual(StrandPalette.sleepStageColor(.rem).rgbaComponents.g,
                        StrandPalette.sleepREM.rgbaComponents.g, accuracy: 0.001)
@@ -82,12 +91,14 @@ final class StrandDesignTests: XCTestCase {
                        StrandPalette.sleepAwake.rgbaComponents.r, accuracy: 0.001)
     }
 
+    @MainActor
     func testSleepStageBandRankOrdering() {
         XCTAssertEqual(SleepStage.awake.bandRank, 0)
         XCTAssertEqual(SleepStage.deep.bandRank, 3)
         XCTAssertLessThan(SleepStage.awake.bandRank, SleepStage.deep.bandRank)
     }
 
+    @MainActor
     func testSampleMidpointInterpolatesBetweenStops() {
         // Halfway between two black/white stops is mid-grey.
         let stops: [Gradient.Stop] = [
@@ -100,6 +111,7 @@ final class StrandDesignTests: XCTestCase {
         XCTAssertEqual(mid.b, 0.5, accuracy: 0.03)
     }
 
+    @MainActor
     func testSleepIntervalDuration() {
         let i = SleepInterval(stage: .deep, start: 100, end: 460)
         XCTAssertEqual(i.duration, 360, accuracy: 0.001)
@@ -107,6 +119,7 @@ final class StrandDesignTests: XCTestCase {
 
     // MARK: - Chart hover toolkit
 
+    @MainActor
     func testNearestIndexEvenlySpaced() {
         // 5 samples across width 100 → stride 25. Cursor near each step.
         XCTAssertEqual(ChartHoverMath.nearestIndex(toX: 0, count: 5, width: 100), 0)
@@ -118,12 +131,14 @@ final class StrandDesignTests: XCTestCase {
         XCTAssertEqual(ChartHoverMath.nearestIndex(toX: 999, count: 5, width: 100), 4)
     }
 
+    @MainActor
     func testNearestIndexEdgeCases() {
         XCTAssertNil(ChartHoverMath.nearestIndex(toX: 10, count: 0, width: 100))
         // Single sample always resolves to index 0.
         XCTAssertEqual(ChartHoverMath.nearestIndex(toX: 80, count: 1, width: 100), 0)
     }
 
+    @MainActor
     func testNearestIndexArbitraryXs() {
         let xs: [CGFloat] = [0, 30, 90, 200]
         XCTAssertEqual(ChartHoverMath.nearestIndex(toX: 5, xs: xs), 0)
@@ -133,6 +148,7 @@ final class StrandDesignTests: XCTestCase {
         XCTAssertNil(ChartHoverMath.nearestIndex(toX: 10, xs: []))
     }
 
+    @MainActor
     func testTooltipPlacementStaysInBounds() {
         let container = CGSize(width: 200, height: 120)
         let size = CGSize(width: 80, height: 36)
@@ -151,6 +167,7 @@ final class StrandDesignTests: XCTestCase {
         XCTAssertLessThanOrEqual(bottomRight.y + size.height / 2, container.height + 0.001)
     }
 
+    @MainActor
     func testTooltipPlacementFlipsBelowWhenNoRoomAbove() {
         let container = CGSize(width: 300, height: 200)
         let size = CGSize(width: 60, height: 40)
@@ -160,11 +177,13 @@ final class StrandDesignTests: XCTestCase {
         XCTAssertGreaterThan(pos.y, 5)
     }
 
+    @MainActor
     func testTrendChartDefaultDateStringNonEmpty() {
         let s = TrendChart.defaultDateString(Date(timeIntervalSince1970: 1_700_000_000))
         XCTAssertFalse(s.isEmpty)
     }
 
+    @MainActor
     func testSparklineDefaultValueString() {
         XCTAssertEqual(Sparkline.defaultValueString(64), "64")
         XCTAssertEqual(Sparkline.defaultValueString(64.5), "64.5")

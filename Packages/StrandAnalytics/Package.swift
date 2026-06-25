@@ -1,5 +1,11 @@
-// swift-tools-version:5.9
+// swift-tools-version: 6.2
 import PackageDescription
+
+let swiftSettings: [SwiftSetting] = [
+    .swiftLanguageMode(.v6),
+    .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
+    .enableUpcomingFeature("InferIsolatedConformances"),
+]
 
 let package = Package(
     name: "StrandAnalytics",
@@ -10,7 +16,7 @@ let package = Package(
         .package(path: "../WhoopStore"),
     ],
     targets: [
-        .target(name: "StrandAnalytics", dependencies: ["WhoopProtocol", "WhoopStore"]),
-        .testTarget(name: "StrandAnalyticsTests", dependencies: ["StrandAnalytics"]),
+        .target(name: "StrandAnalytics", dependencies: ["WhoopProtocol", "WhoopStore"], swiftSettings: swiftSettings),
+        .testTarget(name: "StrandAnalyticsTests", dependencies: ["StrandAnalytics"], swiftSettings: swiftSettings),
     ]
 )

@@ -219,8 +219,9 @@ struct SettingsView: View {
                     .accessibilityLabel(profile.hasAvatar ? "Your profile photo" : "No profile photo set")
 
                 VStack(alignment: .leading, spacing: NoopMetrics.space2) {
+                    let hasAvatar = profile.hasAvatar
                     PhotosPicker(selection: $avatarPickerItem, matching: .images) {
-                        Text(profile.hasAvatar ? "Change photo" : "Choose photo")
+                        Text(hasAvatar ? "Change photo" : "Choose photo")
                     }
                     .buttonStyle(NoopButtonStyle(.secondary, fullWidth: true))
 
@@ -235,7 +236,7 @@ struct SettingsView: View {
         }
         // Load the picked photo's bytes, then hand them to the store (which downscales + persists).
         // Clearing the selection afterwards lets the user re-pick the same photo if they want.
-        .onChange(of: avatarPickerItem) { newItem in
+        .onChangeCompat(of: avatarPickerItem) { newItem in
             guard let newItem else { return }
             Task {
                 let data = try? await newItem.loadTransferable(type: Data.self)

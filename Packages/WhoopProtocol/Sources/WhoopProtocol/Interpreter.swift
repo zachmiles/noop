@@ -673,5 +673,5 @@ private func hexFrameSlice(_ f: [UInt8], _ start: Int, _ end: Int) -> String {
 
 // Post-hook registry (populated in PostHooks.swift by Task B7).
 // name -> (FieldBuilder, frame, length, schema) -> Void
-typealias PostHook = (FieldBuilder, [UInt8], Int?, Schema) -> Void
-var postHooks: [String: PostHook] = [:]
+typealias PostHook = @Sendable (FieldBuilder, [UInt8], Int?, Schema) -> Void
+let postHooks: [String: PostHook] = makePostHooks()

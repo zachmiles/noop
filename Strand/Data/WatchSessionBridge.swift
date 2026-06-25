@@ -164,9 +164,9 @@ final class WatchSessionBridge: NSObject, ObservableObject {
     }
 
     /// The key the encoded snapshot rides under inside the application context dictionary.
-    static let contextKey = "snapshot"
+    nonisolated static let contextKey = "snapshot"
     /// The message key the watch sends on launch to ask for the latest snapshot right now.
-    static let requestLatestKey = "requestLatest"
+    nonisolated static let requestLatestKey = "requestLatest"
 }
 
 // MARK: - WCSessionDelegate
@@ -175,8 +175,9 @@ extension WatchSessionBridge: WCSessionDelegate {
     nonisolated func session(_ session: WCSession,
                              activationDidCompleteWith activationState: WCSessionActivationState,
                              error: Error?) {
+        let isReachable = session.isReachable
         Task { @MainActor in
-            self.isWatchReachable = session.isReachable
+            self.isWatchReachable = isReachable
         }
     }
 
@@ -188,8 +189,9 @@ extension WatchSessionBridge: WCSessionDelegate {
     }
 
     nonisolated func sessionReachabilityDidChange(_ session: WCSession) {
+        let isReachable = session.isReachable
         Task { @MainActor in
-            self.isWatchReachable = session.isReachable
+            self.isWatchReachable = isReachable
         }
     }
 

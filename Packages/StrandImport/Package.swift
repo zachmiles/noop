@@ -1,5 +1,11 @@
-// swift-tools-version:5.9
+// swift-tools-version: 6.2
 import PackageDescription
+
+let swiftSettings: [SwiftSetting] = [
+    .swiftLanguageMode(.v6),
+    .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
+    .enableUpcomingFeature("InferIsolatedConformances"),
+]
 
 let package = Package(
     name: "StrandImport",
@@ -21,12 +27,12 @@ let package = Package(
             // Read-only access to a *foreign* SQLite file (the Mi Fitness export);
             // never opens NOOP's own store. Already in the tree via WhoopStore.
             .product(name: "GRDB", package: "GRDB.swift"),
-        ]),
+        ], swiftSettings: swiftSettings),
         .testTarget(name: "StrandImportTests", dependencies: [
             "StrandImport",
             .product(name: "GRDB", package: "GRDB.swift"),
         ], resources: [
             .copy("Resources"),
-        ]),
+        ], swiftSettings: swiftSettings),
     ]
 )

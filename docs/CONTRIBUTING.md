@@ -143,7 +143,7 @@ pairing, re-importing into the on-device DB).
 | Tool | Notes |
 |---|---|
 | macOS 13+ | Deployment target is macOS 13.0. |
-| Xcode 15+ (Swift 5.9 toolchain) | Provides `xcodebuild` + the macOS SDK. |
+| Xcode 26+ (Swift 6.2+ toolchain) | Provides FlowDeck-compatible Apple build tooling and the macOS SDK. |
 | XcodeGen | Generates `Strand.xcodeproj` from `project.yml` (`brew install xcodegen`). |
 
 The packages themselves only need a Swift toolchain — they build and test with plain `swift build` /

@@ -1,5 +1,11 @@
-// swift-tools-version:5.9
+// swift-tools-version: 6.2
 import PackageDescription
+
+let swiftSettings: [SwiftSetting] = [
+    .swiftLanguageMode(.v6),
+    .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
+    .enableUpcomingFeature("InferIsolatedConformances"),
+]
 
 let package = Package(
     name: "backfill",
@@ -9,6 +15,6 @@ let package = Package(
         .package(path: "../../Packages/WhoopStore"),
     ],
     targets: [
-        .executableTarget(name: "backfill", dependencies: ["StrandImport", "WhoopStore"]),
+        .executableTarget(name: "backfill", dependencies: ["StrandImport", "WhoopStore"], swiftSettings: swiftSettings),
     ]
 )

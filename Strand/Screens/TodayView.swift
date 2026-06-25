@@ -1674,19 +1674,19 @@ struct TodayView: View {
                 let demoHrv: String? = nil
                 let demoRhr: String? = nil
                 #endif
-                metricRow(icon: "waveform.path.ecg", label: "HRV",
+                metricRow(icon: "waveform.path.ecg", label: "HRV", accessibilityLabel: "HRV",
                           value: demoHrv ?? (vd?.avgHrv.map { "\(Int($0.rounded()))" } ?? "—"), unit: "ms",
                           tint: StrandPalette.metricCyan)
                 Divider()
                     .overlay(StrandPalette.hairline)
                     .padding(.leading, NoopMetrics.cardPadding)
-                metricRow(icon: "heart.fill", label: "Resting HR",
+                metricRow(icon: "heart.fill", label: "Resting HR", accessibilityLabel: "Resting HR",
                           value: demoRhr ?? (vd?.restingHr.map { "\($0)" } ?? "—"), unit: "bpm",
                           tint: StrandPalette.metricRose)
                 Divider()
                     .overlay(StrandPalette.hairline)
                     .padding(.leading, NoopMetrics.cardPadding)
-                metricRow(icon: "lungs.fill", label: "Respiratory",
+                metricRow(icon: "lungs.fill", label: "Respiratory", accessibilityLabel: "Respiratory",
                           // Carried day uses its OWN respiratory; a non-carrying today keeps the
                           // sparkline-tail fallback the tile uses so a sparse-but-recent value still reads.
                           value: vd?.respRateBpm.map { String(format: "%.1f", $0) }
@@ -1720,7 +1720,12 @@ struct TodayView: View {
     /// One README "metric row": a metric-hue line icon, a secondary label, and a right-aligned bold
     /// value with a small unit. Rows are divided by a hairline. Shared by the Today vitals card.
     @ViewBuilder
-    private func metricRow(icon: String, label: LocalizedStringKey, value: String, unit: String, tint: Color) -> some View {
+    private func metricRow(icon: String,
+                           label: LocalizedStringKey,
+                           accessibilityLabel: String,
+                           value: String,
+                           unit: String,
+                           tint: Color) -> some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
                 .font(.system(size: 15, weight: .semibold))
@@ -1748,7 +1753,7 @@ struct TodayView: View {
         .padding(.horizontal, NoopMetrics.cardPadding)
         .padding(.vertical, 10)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(label): \(value) \(unit)")
+        .accessibilityLabel(Text("\(accessibilityLabel): \(value) \(unit)"))
     }
 
     // MARK: Synthesis card — today's read, or the carried last-scored read (#543)

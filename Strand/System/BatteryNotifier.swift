@@ -1,5 +1,5 @@
 import Foundation
-import UserNotifications
+@preconcurrency import UserNotifications
 
 /// Surfaces the strap battery state as a user notification — a LOW warning when the cell falls to
 /// the threshold so the user can top up before tonight's sleep, and a CHARGED note when it reaches
