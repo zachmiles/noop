@@ -28,6 +28,44 @@ Template:
 - Notes:
 ```
 
+## 2026-06-25 - Merge upstream v7.2.3 into fork
+
+- Status: committed on sync branch `sync/upstream-2026-06-25`.
+- Files:
+  - `.gitignore`
+  - `Strand/App/AppModel.swift`
+  - `Strand/App/RootView.swift`
+  - `Strand/Resources/Info.plist`
+  - `Strand/Screens/SmartAlarmView.swift`
+  - `Strand/Screens/TodayView.swift`
+  - `Strand/System/AppChangelog.swift`
+  - `StrandiOS/Resources/Assets.xcassets/AppIcon-Navy.appiconset/icon_1024.png`
+  - `Tools/build-v7-artifacts.sh`
+  - `Tools/make_icon.py`
+  - `altstore-source.json`
+  - `android/app/build.gradle.kts`
+  - `android/app/src/main/java/com/noop/ui/AppChangelog.kt`
+  - `android/app/src/main/java/com/noop/ui/AppRoot.kt`
+  - `android/app/src/main/java/com/noop/ui/SmartAlarmScreen.kt`
+  - `project.yml`
+- Reason: bring the fork from upstream `dbc6a9d` to `5687ea5`, including
+  v7.2.1-v7.2.3 release metadata, the sideload IPA watch-strip fix, the Blue
+  Titanium icon fix, macOS Today navigation back-chrome, Smart Alarm/Wind-Down
+  naming disambiguation, What's New backfill, and the #755 iOS dashboard lag
+  fix for heavy histories during strap backfills.
+- Watch during upstream syncs: `TodayView.swift` overlapped the fork's grouped
+  dashboard reads, Charge/dashboard fallback work, source comparison section,
+  RENPHO scale source footer, and app-wide status toast direction. The merge
+  kept upstream's day-scoped/history-wide loader split and backfill debounce,
+  kept the fork's grouped reads and local data-source surfaces, moved source
+  comparison refresh into the day-scoped path so it follows date navigation, and
+  left the inline syncing note out in favor of the fork's app-wide status model.
+- Validation: regenerated `Strand.xcodeproj` with `xcodegen generate`; `flowdeck
+  build` passed for saved config `NOOPiOS` on `Zach’s iPhone Air`.
+- Notes: upstream version values are now `MARKETING_VERSION` 7.2.3, iOS build
+  155, and macOS bundle build 186. The fork's bundle/team namespace stayed in
+  `project.yml`.
+
 ## 2026-06-25 - Charge naming and dashboard fallbacks
 
 - Status: committed in this fork as
