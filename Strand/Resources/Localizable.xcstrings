@@ -1185,6 +1185,16 @@
         }
       }
     },
+    "%@. %@. %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@. %2$@. %3$@"
+          }
+        }
+      }
+    },
     "%@. Change day" : {
       "localizations" : {
         "de" : {
@@ -2608,6 +2618,9 @@
         }
       }
     },
+    "A couple of metrics depend on which Apple Watch you wear. Wrist temperature, which feeds skin temp, arrived with Series 8, so older watches don't report it. Blood oxygen is the bigger one: Apple removed the SpO₂ sensor from the newest US units over a patent dispute, so those simply don't measure it." : {
+
+    },
     "A few more days and we can show your Fitness Age." : {
       "localizations" : {
         "de" : {
@@ -2695,6 +2708,9 @@
           }
         }
       }
+    },
+    "A note on blood oxygen and your model" : {
+
     },
     "A period is likely between %@ and %@ — a window, not a fixed date." : {
       "localizations" : {
@@ -3094,6 +3110,9 @@
           }
         }
       }
+    },
+    "About Apple Watch data" : {
+
     },
     "About Lab Book" : {
       "localizations" : {
@@ -3907,6 +3926,34 @@
         }
       }
     },
+    "After tonight's sleep" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nach dem Schlaf heute Nacht"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "After tonight's sleep"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Después de dormir esta noche"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "После сегодняшнего сна"
+          }
+        }
+      }
+    },
     "Age" : {
       "localizations" : {
         "de" : {
@@ -4068,6 +4115,9 @@
           }
         }
       }
+    },
+    "Allow Apple Health access" : {
+
     },
     "Also share my patterns & Lab Book" : {
       "localizations" : {
@@ -4489,7 +4539,16 @@
         }
       }
     },
+    "Apple Health isn't available on this device, so there's nothing to connect here." : {
+
+    },
     "Apple Intelligence" : {
+
+    },
+    "APPLE WATCH" : {
+
+    },
+    "Apple Watch. Needs more data to score this yet." : {
 
     },
     "Armed on the strap itself, so it can buzz at your wake time even if your phone is asleep or NOOP is closed. We send the same alarm command the official app sends, but a strap-driven wake-up hasn't been confirmed on our side yet, so please keep a backup alarm for now." : {
@@ -4778,6 +4837,9 @@
         }
       }
     },
+    "Audio cues" : {
+
+    },
     "Auto" : {
       "localizations" : {
         "de" : {
@@ -4924,6 +4986,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Автоматизации"
+          }
+        }
+      }
+    },
+    "Autonomic load" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autonome Belastung"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autonomic load"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Carga autónoma"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вегетативная нагрузка"
           }
         }
       }
@@ -6054,6 +6144,34 @@
         }
       }
     },
+    "Breaths per minute" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Atemzüge pro Minute"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Breaths per minute"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Respiraciones por minuto"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вдохов в минуту"
+          }
+        }
+      }
+    },
     "Broadcast heart rate" : {
       "localizations" : {
         "de" : {
@@ -6304,6 +6422,62 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Создайте свой лучший альбом…"
+          }
+        }
+      }
+    },
+    "Building, moves as you do" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wird ermittelt, ändert sich mit dir"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Building, moves as you do"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Calculando, cambia contigo"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Формируется, меняется с активностью"
+          }
+        }
+      }
+    },
+    "Building, wear it tonight" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wird ermittelt, heute Nacht tragen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Building, wear it tonight"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Calculando, úsala esta noche"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Формируется, наденьте на ночь"
           }
         }
       }
@@ -8419,6 +8593,9 @@
         }
       }
     },
+    "Connect Apple Health" : {
+
+    },
     "Connect strap for buzz cues" : {
       "localizations" : {
         "de" : {
@@ -8790,6 +8967,9 @@
           }
         }
       }
+    },
+    "Continue" : {
+
     },
     "Continuous HRV capture" : {
       "localizations" : {
@@ -11025,6 +11205,9 @@
         }
       }
     },
+    "Each metric, where your Apple Watch sits on it, and why." : {
+
+    },
     "EARLIER" : {
       "localizations" : {
         "de" : {
@@ -12008,6 +12191,9 @@
           }
         }
       }
+    },
+    "Every release, mirrored. A fallback if GitHub is ever down." : {
+
     },
     "Every score carries a small honesty label. Calibrating means NOOP is still learning your baseline, or doesn't have enough data yet. Building means there's enough to show, but it's thin. Solid means full inputs are present. When NOOP can't compute a score honestly, it shows nothing rather than a fake number." : {
       "localizations" : {
@@ -13546,6 +13732,9 @@
         }
       }
     },
+    "Goes to the Apple Health permission step" : {
+
+    },
     "Going to sleep" : {
       "localizations" : {
         "de" : {
@@ -13959,6 +14148,34 @@
         }
       }
     },
+    "Heart-rate variability" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Herzfrequenzvariabilität"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Heart-rate variability"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Variabilidad de la frecuencia cardíaca"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вариабельность сердечного ритма"
+          }
+        }
+      }
+    },
     "Height" : {
       "localizations" : {
         "de" : {
@@ -14319,6 +14536,9 @@
         }
       }
     },
+    "Holds the screen awake while you're recording a workout, so your live heart rate stays visible without the device dimming. Only applies during a recording — the screen sleeps normally the rest of the time. Leaving it on does use a bit more battery, and means your unlocked screen stays visible for the whole workout, so flip it off if that's a concern." : {
+
+    },
     "Hours asleep" : {
       "localizations" : {
         "de" : {
@@ -14441,6 +14661,62 @@
         }
       }
     },
+    "How Charge is calculated" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "So wird Ladung berechnet"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "How Charge is calculated"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cómo se calcula Carga"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Как рассчитывается Заряд"
+          }
+        }
+      }
+    },
+    "How Effort is calculated" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "So wird Anstrengung berechnet"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "How Effort is calculated"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cómo se calcula Esfuerzo"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Как рассчитывается Усилие"
+          }
+        }
+      }
+    },
     "How NOOP splits a night into light / deep / REM. This is a separate, opt-in recipe — your default staging is unchanged unless you turn it on." : {
       "localizations" : {
         "de" : {
@@ -14481,6 +14757,62 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Как работает NOOP"
+          }
+        }
+      }
+    },
+    "How Rest is calculated" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "So wird Ruhe berechnet"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "How Rest is calculated"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cómo se calcula Descanso"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Как рассчитывается Отдых"
+          }
+        }
+      }
+    },
+    "How Stress is calculated" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "So wird Stress berechnet"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "How Stress is calculated"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cómo se calcula Estrés"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Как рассчитывается Стресс"
           }
         }
       }
@@ -15093,6 +15425,9 @@
         }
       }
     },
+    "If you don't see the prompt, turn NOOP on under Settings › Health › Data Access & Devices." : {
+
+    },
     "Imperial" : {
       "localizations" : {
         "de" : {
@@ -15704,6 +16039,9 @@
           }
         }
       }
+    },
+    "Keep screen on during a workout" : {
+
     },
     "Keep your own numbers here" : {
       "localizations" : {
@@ -18358,6 +18696,12 @@
         }
       }
     },
+    "Mirror — noop.fans" : {
+
+    },
+    "Mirror at noop dot fans, a fallback if GitHub is down" : {
+
+    },
     "ml/kg/min" : {
       "localizations" : {
         "de" : {
@@ -18923,6 +19267,9 @@
         }
       }
     },
+    "Needs more data" : {
+
+    },
     "Needs the strap" : {
       "localizations" : {
         "de" : {
@@ -19099,6 +19446,9 @@
         }
       }
     },
+    "Next week" : {
+
+    },
     "Night detail" : {
       "localizations" : {
         "de" : {
@@ -19248,6 +19598,9 @@
           }
         }
       }
+    },
+    "No chest strap? No problem. NOOP can run off only your Apple Watch. It reads your watch's data through Apple Health and works out your Charge, Rest, Effort and Fitness Age right here on your phone. Everything stays on the device." : {
+
     },
     "No clear reading yet" : {
       "localizations" : {
@@ -19807,6 +20160,9 @@
         }
       }
     },
+    "No readings this week" : {
+
+    },
     "No readings this week yet" : {
       "localizations" : {
         "de" : {
@@ -20240,6 +20596,9 @@
         }
       }
     },
+    "NOOP can run off only an Apple Watch, no chest strap needed. The watch is the sensor; NOOP does the thinking on your phone, computing Charge, Rest, Effort and your Fitness Age from your Health data, all on-device." : {
+
+    },
     "NOOP computed" : {
       "localizations" : {
         "de" : {
@@ -20499,6 +20858,12 @@
           }
         }
       }
+    },
+    "NOOP reads your Apple Watch data through Apple Health, on your phone, nothing leaves the device. You choose exactly what to share." : {
+
+    },
+    "NOOP reads your heart rate, HRV, resting heart rate, sleep, steps, energy and VO₂ max from Apple Health to compute your scores. It all stays on this iPhone, and you pick exactly what to share on the next screen." : {
+
     },
     "NOOP scores your charge, effort and rest itself — on-device, no cloud." : {
       "localizations" : {
@@ -22033,6 +22398,9 @@
         }
       }
     },
+    "Opens the Apple Watch setup and Health permission" : {
+
+    },
     "Opens the Devices screen, where you pair and switch bands." : {
       "localizations" : {
         "de" : {
@@ -23478,6 +23846,9 @@
         }
       }
     },
+    "Previous week" : {
+
+    },
     "Profile" : {
       "localizations" : {
         "de" : {
@@ -23551,6 +23922,7 @@
       }
     },
     "Project home and source code at noop dot fans" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -23571,6 +23943,9 @@
           }
         }
       }
+    },
+    "Project home and source code on GitHub" : {
+
     },
     "Proof that the console is current" : {
       "localizations" : {
@@ -24460,6 +24835,9 @@
         }
       }
     },
+    "Ready to connect your watch?" : {
+
+    },
     "Ready to scan" : {
       "localizations" : {
         "de" : {
@@ -24958,6 +25336,9 @@
           }
         }
       }
+    },
+    "Recovery, NOOP's Charge score, is led by your heart-rate variability measured against your own personal baseline. A chest strap streams beat-to-beat data densely all night, so it can learn that baseline fast. An Apple Watch instead samples HRV, a handful of readings through the day plus overnight, so the signal is real but sparser." : {
+
     },
     "Reference range from your own report, optional" : {
       "localizations" : {
@@ -25922,12 +26303,6 @@
             "state" : "translated",
             "value" : "Восстанавливающий"
           }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Energía activa"
-          }
         }
       }
     },
@@ -26803,12 +27178,6 @@
             "state" : "translated",
             "value" : "Маркеры поиска (например, ЛПНП, ферритин)"
           }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Oxígeno en sangre"
-          }
         }
       }
     },
@@ -26830,12 +27199,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Поиск спорта"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Oxígeno en sangre"
           }
         }
       }
@@ -27250,6 +27613,9 @@
         }
       }
     },
+    "Set up Apple Watch" : {
+
+    },
     "Settings" : {
       "localizations" : {
         "de" : {
@@ -27296,12 +27662,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Расселение"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Calorías"
           }
         }
       }
@@ -27575,6 +27935,9 @@
         }
       }
     },
+    "Shows the Apple Health permission sheet" : {
+
+    },
     "Shows your live heart rate on the Lock Screen and in the Dynamic Island while the strap is connected. Turn it off to keep your live HR out of the Dynamic Island. (Any one already showing clears within a moment.)" : {
       "localizations" : {
         "de" : {
@@ -27831,6 +28194,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Сидите спокойно и дышите с кайфом. Вы можете остановиться в любой момент; остановленная развертка не зафиксирует темп."
+          }
+        }
+      }
+    },
+    "Skin Temp" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hauttemperatur"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skin Temp"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Temp. de piel"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Темп. кожи"
           }
         }
       }
@@ -28269,6 +28660,9 @@
         }
       }
     },
+    "Soft tone on each phase · respects silent mode" : {
+
+    },
     "Solid" : {
       "localizations" : {
         "de" : {
@@ -28371,6 +28765,9 @@
           }
         }
       }
+    },
+    "Source: Apple Watch" : {
+
     },
     "Sources differ" : {
       "localizations" : {
@@ -28936,6 +29333,9 @@
         }
       }
     },
+    "Step to another week with the arrows above to see its review." : {
+
+    },
     "Steps" : {
       "localizations" : {
         "de" : {
@@ -29174,6 +29574,9 @@
         }
       }
     },
+    "Stops the screen dimming while a workout is recording" : {
+
+    },
     "Storage" : {
       "localizations" : {
         "de" : {
@@ -29363,6 +29766,7 @@
       }
     },
     "Strap battery %lld percent%@" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -29386,6 +29790,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ремешок батареи%1$lld проц%2$@"
+          }
+        }
+      }
+    },
+    "Strap battery %lld percent%@%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Strap battery %1$lld percent%2$@%3$@"
           }
         }
       }
@@ -29602,12 +30016,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ремешок не подключен. Нажмите, чтобы подключиться."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "VFC"
           }
         }
       }
@@ -29955,12 +30363,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Поддержка"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Anoche"
           }
         }
       }
@@ -30617,6 +31019,9 @@
         }
       }
     },
+    "That's why a watch-only Charge starts out “Calibrating”. NOOP needs about seven nights of your HRV to learn what normal looks like for you. Until it has them it withholds the score rather than guess. Once the baseline is set, your Charge appears with its confidence, on the same 0–100 scale as a strap's." : {
+
+    },
     "THE BASICS" : {
       "localizations" : {
         "de" : {
@@ -30660,6 +31065,9 @@
           }
         }
       }
+    },
+    "The honest catch: a watch isn't a chest strap. It's brilliant at sleep, steps, workouts and fitness, and lighter on the dense heart-rate-variability a strap measures all night. So recovery takes about a week to calibrate, and a couple of metrics depend on your watch model. NOOP is upfront about all of it. Every watch-derived number carries a confidence, and where the watch can't be honest, NOOP shows nothing instead of a made-up figure." : {
+
     },
     "The line is each waking hour's 0–3 proxy, scored against your own calm hours today. The bar below splits your day into calm, moderate and high stress time." : {
       "localizations" : {
@@ -30893,6 +31301,9 @@
         }
       }
     },
+    "These are independent estimates computed on your device from your Apple Health data, not medical advice. Confidence labels are honest about how much NOOP knows so far." : {
+
+    },
     "These are the days where your phone also counted steps, so NOOP can learn how your motion maps to steps. Or set the coefficient manually below." : {
       "localizations" : {
         "de" : {
@@ -31109,6 +31520,9 @@
           }
         }
       }
+    },
+    "This install can't connect to Apple Health directly. It was sideloaded with a free signing profile, which doesn't include Apple's Health permission, so there's nothing to grant here." : {
+
     },
     "This is a wellness visualization, not a screening test. It does not tell you to see a clinician and it names no condition. This is not legal or medical advice." : {
       "localizations" : {
@@ -31564,6 +31978,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Сегодня"
+          }
+        }
+      }
+    },
+    "Today's fluid" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flüssigkeit heute"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Today's fluid"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Líquido de hoy"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Жидкость за сегодня"
           }
         }
       }
@@ -32488,6 +32930,34 @@
         }
       }
     },
+    "Updated weekly" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wöchentlich aktualisiert"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Updated weekly"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Actualizado semanalmente"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Обновляется еженедельно"
+          }
+        }
+      }
+    },
     "Updates" : {
       "localizations" : {
         "de" : {
@@ -32634,6 +33104,12 @@
           }
         }
       }
+    },
+    "Use NOOP with just an Apple Watch. What it's great at, and where it's lighter than a strap." : {
+
+    },
+    "Use NOOP with your watch" : {
+
     },
     "Using" : {
       "localizations" : {
@@ -32892,12 +33368,6 @@
             "state" : "translated",
             "value" : "Жизненные показатели"
           }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Respiración"
-          }
         }
       }
     },
@@ -32991,12 +33461,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "против WHOOP"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Frecuencia cardíaca en reposo"
           }
         }
       }
@@ -33226,6 +33690,9 @@
           }
         }
       }
+    },
+    "Want the full breakdown of every metric and how sure NOOP is about each one? The “About Apple Watch data” page in Settings has the honest table." : {
+
     },
     "Warming up — keep moving to climb into Zone 1." : {
       "localizations" : {
@@ -33503,6 +33970,34 @@
         }
       }
     },
+    "Wellness score" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wellness-Wert"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wellness score"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Puntuación de bienestar"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Оценка благополучия"
+          }
+        }
+      }
+    },
     "What are you adding?" : {
       "localizations" : {
         "de" : {
@@ -33618,6 +34113,9 @@
           }
         }
       }
+    },
+    "WHAT IT'S GREAT AT" : {
+
     },
     "What Lab Book is — and isn't" : {
       "localizations" : {
@@ -33735,6 +34233,12 @@
         }
       }
     },
+    "WHAT THE WATCH CAN DO" : {
+
+    },
+    "What to expect" : {
+
+    },
     "WHAT TO EXPECT" : {
       "localizations" : {
         "de" : {
@@ -33784,6 +34288,9 @@
           }
         }
       }
+    },
+    "What your watch is great at, where it's lighter than a chest strap, and how sure NOOP is." : {
+
     },
     "What's new" : {
       "localizations" : {
@@ -33934,6 +34441,12 @@
           }
         }
       }
+    },
+    "Where a sensor isn't on your watch, NOOP reads “not available” for that metric, never a zero, never an invented number. Everything else keeps working." : {
+
+    },
+    "WHERE IT'S LIGHTER THAN A STRAP" : {
+
     },
     "Where NOOP's on-device space is going — and a one-tap clean-up." : {
       "localizations" : {
@@ -34341,6 +34854,9 @@
           }
         }
       }
+    },
+    "Why recovery calibrates over about a week" : {
+
     },
     "Why this is logged as a nap" : {
       "localizations" : {
@@ -34777,6 +35293,12 @@
         }
       }
     },
+    "You can change what you share any time in Settings › Health › Data Access & Devices." : {
+
+    },
+    "You can still bring your data in by importing a Health export from Data Sources. A build from the App Store, or one signed with a paid Apple Developer account, connects directly." : {
+
+    },
     "You removed your active strap. Choose which paired band provides your live data, or leave none active and pair one later." : {
       "localizations" : {
         "de" : {
@@ -34927,6 +35449,9 @@
         }
       }
     },
+    "You're connected. NOOP is reading your Apple Watch data now. Your Charge score will spend its first week or so calibrating, then settle in." : {
+
+    },
     "You're on the latest (%@)." : {
       "localizations" : {
         "de" : {
@@ -34948,6 +35473,9 @@
           }
         }
       }
+    },
+    "Your Apple Watch as a device" : {
+
     },
     "Your bands report different numbers. Here's every source, and the one NOOP is using." : {
       "localizations" : {
@@ -35504,6 +36032,9 @@
         }
       }
     },
+    "Your watch, NOOP's brain" : {
+
+    },
     "Z%lld" : {
       "localizations" : {
         "de" : {
@@ -35700,622 +36231,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Δ к пред."
-          }
-        }
-      }
-    },
-    "Fitness Age": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Fitness Age"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Fitnessalter"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Edad fitness"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Фитнес-возраст"
-          }
-        }
-      }
-    },
-    "Vitality": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Vitality"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Vitalität"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Vitalidad"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Жизненная энергия"
-          }
-        }
-      }
-    },
-    "Skin Temp": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Skin Temp"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Hauttemperatur"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Temp. de piel"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Темп. кожи"
-          }
-        }
-      }
-    },
-    "Hydration": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Hydration"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Flüssigkeit"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Hidratación"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Гидратация"
-          }
-        }
-      }
-    },
-    "Heart-rate variability": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Heart-rate variability"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Herzfrequenzvariabilität"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Variabilidad de la frecuencia cardíaca"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Вариабельность сердечного ритма"
-          }
-        }
-      }
-    },
-    "Breaths per minute": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Breaths per minute"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Atemzüge pro Minute"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Respiraciones por minuto"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Вдохов в минуту"
-          }
-        }
-      }
-    },
-    "Autonomic load": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Autonomic load"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Autonome Belastung"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Carga autónoma"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Вегетативная нагрузка"
-          }
-        }
-      }
-    },
-    "Updated weekly": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Updated weekly"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Wöchentlich aktualisiert"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Actualizado semanalmente"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Обновляется еженедельно"
-          }
-        }
-      }
-    },
-    "Wellness score": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Wellness score"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Wellness-Wert"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Puntuación de bienestar"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Оценка благополучия"
-          }
-        }
-      }
-    },
-    "Skin temperature": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Skin temperature"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Hauttemperatur"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Temperatura de la piel"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Температура кожи"
-          }
-        }
-      }
-    },
-    "Today's fluid": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Today's fluid"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Flüssigkeit heute"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Líquido de hoy"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Жидкость за сегодня"
-          }
-        }
-      }
-    },
-    "Charge": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Charge"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ladung"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Carga"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Заряд"
-          }
-        }
-      }
-    },
-    "Effort": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Effort"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Anstrengung"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Esfuerzo"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Усилие"
-          }
-        }
-      }
-    },
-    "How Charge is calculated": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "How Charge is calculated"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "So wird Ladung berechnet"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cómo se calcula Carga"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Как рассчитывается Заряд"
-          }
-        }
-      }
-    },
-    "How Effort is calculated": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "How Effort is calculated"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "So wird Anstrengung berechnet"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cómo se calcula Esfuerzo"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Как рассчитывается Усилие"
-          }
-        }
-      }
-    },
-    "How Rest is calculated": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "How Rest is calculated"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "So wird Ruhe berechnet"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cómo se calcula Descanso"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Как рассчитывается Отдых"
-          }
-        }
-      }
-    },
-    "How Stress is calculated": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "How Stress is calculated"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "So wird Stress berechnet"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cómo se calcula Estrés"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Как рассчитывается Стресс"
-          }
-        }
-      }
-    },
-    "Needs the strap": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Needs the strap"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Strap erforderlich"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Necesita la banda"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Нужен ремешок"
-          }
-        }
-      }
-    },
-    "Building, wear it tonight": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Building, wear it tonight"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Wird ermittelt, heute Nacht tragen"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Calculando, úsala esta noche"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Формируется, наденьте на ночь"
-          }
-        }
-      }
-    },
-    "Building, moves as you do": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Building, moves as you do"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Wird ermittelt, ändert sich mit dir"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Calculando, cambia contigo"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Формируется, меняется с активностью"
-          }
-        }
-      }
-    },
-    "After tonight's sleep": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "After tonight's sleep"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nach dem Schlaf heute Nacht"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Después de dormir esta noche"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "После сегодняшнего сна"
-          }
-        }
-      }
-    },
-    "Calibrating — %lld of %lld": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Calibrating — %lld of %lld"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Kalibrierung — %lld von %lld"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Calibrando — %lld de %lld"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Калибровка — %lld из %lld"
           }
         }
       }
