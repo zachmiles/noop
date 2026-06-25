@@ -33,6 +33,7 @@ final class HealthKitBridge: ObservableObject {
 
     private let store = HKHealthStore()
     private let repo: Repository
+    private let profile: ProfileStore
     /// Source id imported HealthKit data lands under (matches `AppModel.appleDeviceId`).
     private let appleDeviceId: String
     /// NOOP's own strap-derived source id, read back when writing into Health.
@@ -43,8 +44,9 @@ final class HealthKitBridge: ObservableObject {
     /// `noopDeviceId` daily row, so those metrics exist ONLY here.
     private var computedDeviceId: String { noopDeviceId + "-noop" }
 
-    init(repo: Repository, appleDeviceId: String, noopDeviceId: String) {
+    init(repo: Repository, profile: ProfileStore, appleDeviceId: String, noopDeviceId: String) {
         self.repo = repo
+        self.profile = profile
         self.appleDeviceId = appleDeviceId
         self.noopDeviceId = noopDeviceId
         // Order matters: a free-signed build with no HealthKit entitlement is dead in the water even
@@ -63,6 +65,9 @@ final class HealthKitBridge: ObservableObject {
     private var readTypes: Set<HKObjectType> {
         var s = Set<HKObjectType>()
         for id in HealthKitBridge.quantityReadIds { if let t = HKObjectType.quantityType(forIdentifier: id) { s.insert(t) } }
+        for id in HealthKitBridge.characteristicReadIds {
+            if let t = HKObjectType.characteristicType(forIdentifier: id) { s.insert(t) }
+        }
         if let sleep = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) { s.insert(sleep) }
         s.insert(HKObjectType.workoutType())
         return s
@@ -80,16 +85,21 @@ final class HealthKitBridge: ObservableObject {
         return s
     }
 
-    // Every id here ends up in the HealthKit permission dialog. Only request what `sync` actually
-    // aggregates into `DayAgg`; adding read scopes the app never consumes makes the consent prompt
-    // noisier and surfaces a privacy ask we don't honour.
+    // Every id here ends up in the HealthKit permission dialog. Only request what `sync` aggregates
+    // into `DayAgg` or mirrors into ProfileStore; unused scopes make the consent prompt noisier and
+    // surface a privacy ask we don't honour.
     private static let quantityReadIds: [HKQuantityTypeIdentifier] = [
         .heartRate, .restingHeartRate, .heartRateVariabilitySDNN, .oxygenSaturation,
         .respiratoryRate, .bodyTemperature, .stepCount, .activeEnergyBurned,
         .basalEnergyBurned, .vo2Max,
+        // Profile fields — mirrored into ProfileStore so zones/calories don't start from manual defaults.
+        .height,
         // Body composition — READ-ONLY (#20). Imported under the apple-health source like the file
         // importer already ingests; deliberately NOT in quantityWriteIds (we never write these back).
         .bodyMass, .bodyFatPercentage, .leanBodyMass, .bodyMassIndex
+    ]
+    private static let characteristicReadIds: [HKCharacteristicTypeIdentifier] = [
+        .dateOfBirth, .biologicalSex
     ]
     private static let quantityWriteIds: [HKQuantityTypeIdentifier] = [
         .restingHeartRate, .heartRateVariabilitySDNN, .oxygenSaturation, .respiratoryRate
@@ -122,6 +132,7 @@ final class HealthKitBridge: ObservableObject {
             // the authoritative signal; the `.notDetermined` fallback only matters when that check can't
             // run, which on iOS means an App Store build that by definition has the entitlement.
             auth = .authorized
+            await syncProfile()
         } catch {
             // A thrown error here is on a build that carries the entitlement (guarded above), so it's a
             // genuine denial / request failure — keep the normal `.denied` "enable in Settings" path,
@@ -146,6 +157,7 @@ final class HealthKitBridge: ObservableObject {
         let granted = writeTypes.allSatisfy { store.authorizationStatus(for: $0) == .sharingAuthorized }
         if granted {
             auth = .authorized
+            Task { await syncProfile() }
             // A returning user who already granted access should get the live stream re-armed for this
             // process. enableLiveDelivery is idempotent (HealthKit dedups observers + background
             // delivery per type), so calling it here as well as after a fresh requestAuthorization is safe.
@@ -153,15 +165,56 @@ final class HealthKitBridge: ObservableObject {
         }
     }
 
+    /// Pull Health's stable profile fields into NOOP's local ProfileStore. HealthKit exposes birth date
+    /// and biological sex as characteristics, while height/weight are ordinary latest samples.
+    func syncProfile() async {
+        guard auth == .authorized, HKHealthStore.isHealthDataAvailable() else { return }
+        let age = Self.age(from: (try? store.dateOfBirthComponents()))
+        let sex = (try? store.biologicalSex()).flatMap { Self.profileSex(from: $0.biologicalSex) }
+        let height = await latestQuantity(.height, unit: .meterUnit(with: .centi))
+        let weight = await latestQuantity(.bodyMass, unit: .gramUnit(with: .kilo))
+        _ = profile.applyHealthProfile(age: age, sex: sex, weightKg: weight, heightCm: height)
+    }
+
+    private static func age(from components: DateComponents?) -> Int? {
+        guard let components,
+              let date = Calendar.current.date(from: components) else { return nil }
+        let years = Calendar.current.dateComponents([.year], from: date, to: Date()).year
+        return years.flatMap { (13...100).contains($0) ? $0 : nil }
+    }
+
+    private static func profileSex(from sex: HKBiologicalSex) -> String? {
+        switch sex {
+        case .male: return "male"
+        case .female: return "female"
+        case .other: return "nonbinary"
+        default: return nil
+        }
+    }
+
+    private func latestQuantity(_ id: HKQuantityTypeIdentifier, unit: HKUnit) async -> Double? {
+        guard let type = HKQuantityType.quantityType(forIdentifier: id) else { return nil }
+        return await withCheckedContinuation { (cont: CheckedContinuation<Double?, Never>) in
+            let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
+            let query = HKSampleQuery(sampleType: type,
+                                      predicate: nil,
+                                      limit: 1,
+                                      sortDescriptors: [sort]) { _, samples, _ in
+                let value = (samples?.first as? HKQuantitySample)?.quantity.doubleValue(for: unit)
+                cont.resume(returning: value)
+            }
+            store.execute(query)
+        }
+    }
+
     // MARK: - Live delivery (continuous ingestion)
 
-    /// The scored read types we want a live observer + hourly background delivery on. This is the
-    /// subset of `quantityReadIds` (plus sleep) that actually feeds Charge/Rest/Effort/Fitness Age, so
-    /// a watch-only user's numbers refresh on their own rather than only when the app is foregrounded.
-    /// We deliberately do NOT observe the body-composition reads (weight/BMI/etc.) — those don't move a
-    /// score and a manual weigh-in shouldn't wake the app every hour.
+    /// The read types we want a live observer + hourly background delivery on. Scored metrics keep
+    /// Charge/Rest/Effort/Fitness Age fresh; body mass and height keep the profile's Health-owned
+    /// measurements current after new Health samples land.
     private static let liveQuantityIds: [HKQuantityTypeIdentifier] = [
-        .heartRateVariabilitySDNN, .restingHeartRate, .activeEnergyBurned, .heartRate, .vo2Max
+        .heartRateVariabilitySDNN, .restingHeartRate, .activeEnergyBurned, .heartRate, .vo2Max,
+        .bodyMass, .height
     ]
 
     /// Long-lived observer queries, retained so HealthKit doesn't tear them down. Keyed by the sample
@@ -217,6 +270,7 @@ final class HealthKitBridge: ObservableObject {
     /// recent days current; 7 covers a weekend of missed wakes. Exposed for the existing scenePhase
     /// hook in `StrandiOSApp` to call — no other file is edited.
     func foregroundCatchUp() async {
+        await syncProfile()
         await sync(days: 7)
     }
 
@@ -281,6 +335,7 @@ final class HealthKitBridge: ObservableObject {
     /// upserts keyed by day).
     func sync(days: Int = 30) async {
         guard auth == .authorized, !syncing else { return }
+        await syncProfile()
         syncing = true
         defer { syncing = false }
         guard let store = await repo.storeHandle() else { return }
@@ -623,6 +678,9 @@ final class HealthKitBridge: ObservableObject {
         }
         Self.scaleLog("Apple Health saving \(candidates.count) scale sample(s) for \(day)")
         try await self.store.save(candidates.map { $0.sample })
+        if let weightKg = metrics["weight"] {
+            _ = profile.applyHealthProfile(weightKg: weightKg)
+        }
     }
 
     private static func scaleLog(_ message: String) {

@@ -730,20 +730,17 @@ private struct ProfileStep: View {
 
                         Divider().overlay(StrandPalette.hairline)
 
-                        // Steppers, not sliders — matches the Age row above and the macOS Settings
-                        // profile editor (same ranges/steps), so every numeric profile field is
-                        // consistent across onboarding and Settings on both platforms.
-                        Stepper(value: $profile.weightKg, in: 30...250, step: 0.5) {
-                            FieldRow(label: "Weight",
-                                     value: UnitFormatter.massFromKilograms(profile.weightKg, system: unitSystem))
-                        }
+                        FieldRow(label: "Weight",
+                                 value: profile.weightFromHealth
+                                    ? UnitFormatter.massFromKilograms(profile.weightKg, system: unitSystem)
+                                    : "—")
 
                         Divider().overlay(StrandPalette.hairline)
 
-                        Stepper(value: $profile.heightCm, in: 120...230, step: 1) {
-                            FieldRow(label: "Height",
-                                     value: UnitFormatter.heightFromCentimeters(profile.heightCm, system: unitSystem))
-                        }
+                        FieldRow(label: "Height",
+                                 value: profile.heightFromHealth
+                                    ? UnitFormatter.heightFromCentimeters(profile.heightCm, system: unitSystem)
+                                    : "—")
                     }
                 }
 

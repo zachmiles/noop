@@ -6,6 +6,11 @@ import StrandImport
 /// source id ("apple-health"), so it sits BESIDE Whoop for the per-source pages and cross-source
 /// consensus. Populates appleDaily, dailyMetric, the generic metricSeries, and workouts.
 enum AppleHealthImport {
+    struct Outcome {
+        var summary: ImportSummary
+        var profile: AppleHealthProfile?
+    }
+
     enum ProgressEvent {
         case cacheLookup
         case cacheHit(days: Int, records: Int)
@@ -16,12 +21,13 @@ enum AppleHealthImport {
         case writing(step: String, completed: Int?, total: Int?)
     }
 
-    private static let cacheVersion = 3
+    private static let cacheVersion = 4
 
     private struct CachePayload: Codable {
         var version: Int
         var fingerprint: String
         var summary: ImportSummary
+        var profile: AppleHealthProfile?
         var appleRows: [AppleDaily]
         var dailyMetrics: [DailyMetric]
         var metricPoints: [MetricPoint]
@@ -31,13 +37,13 @@ enum AppleHealthImport {
 
     @discardableResult
     static func importExport(url: URL, into store: WhoopStore, deviceId: String,
-                             progress: ((ProgressEvent) -> Void)? = nil) async throws -> ImportSummary {
+                             progress: ((ProgressEvent) -> Void)? = nil) async throws -> Outcome {
         progress?(.cacheLookup)
         let fingerprint = try cacheFingerprint(for: url)
         if let cached = loadCache(fingerprint: fingerprint) {
             progress?(.cacheHit(days: cached.dailyMetrics.count, records: cached.summary.recordCount))
             try await write(cached, into: store, deviceId: deviceId, progress: progress)
-            return cached.summary
+            return Outcome(summary: cached.summary, profile: cached.profile)
         }
         progress?(.cacheMiss)
 
@@ -94,12 +100,13 @@ enum AppleHealthImport {
         }
 
         let payload = CachePayload(version: cacheVersion, fingerprint: fingerprint, summary: result.summary,
+                                   profile: result.profile,
                                    appleRows: appleRows, dailyMetrics: dm, metricPoints: points,
                                    sleepSessions: sleepSessions, workouts: workouts)
         progress?(.caching)
         saveCache(payload)
         try await write(payload, into: store, deviceId: deviceId, progress: progress)
-        return payload.summary
+        return Outcome(summary: payload.summary, profile: payload.profile)
     }
 
     private static func write(_ payload: CachePayload, into store: WhoopStore, deviceId: String,

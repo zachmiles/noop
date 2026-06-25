@@ -10,6 +10,8 @@ final class ProfileStore: ObservableObject {
     @Published var sex: String { didSet { d.set(sex, forKey: K.sex) } }          // "male" | "female" | "nonbinary"
     @Published var weightKg: Double { didSet { d.set(weightKg, forKey: K.weight) } }
     @Published var heightCm: Double { didSet { d.set(heightCm, forKey: K.height) } }
+    @Published private(set) var weightFromHealth: Bool { didSet { d.set(weightFromHealth, forKey: K.weightFromHealth) } }
+    @Published private(set) var heightFromHealth: Bool { didSet { d.set(heightFromHealth, forKey: K.heightFromHealth) } }
     /// Optional waist circumference (cm); 0 = not set. Only used to ALSO show an estimated VO₂max
     /// alongside Fitness Age — the Fitness Age itself does not need it (the body term cancels).
     @Published var waistCm: Double { didSet { d.set(waistCm, forKey: K.waist) } }
@@ -54,6 +56,8 @@ final class ProfileStore: ObservableObject {
     private enum K {
         static let age = "profile.age", sex = "profile.sex", weight = "profile.weightKg"
         static let height = "profile.heightCm", hrMax = "profile.hrMaxOverride"
+        static let weightFromHealth = "profile.weightFromHealth"
+        static let heightFromHealth = "profile.heightFromHealth"
         static let stepScale = "profile.stepTicksPerStep"
         static let waist = "profile.waistCm"
         static let stepsCoeff = "profile.stepsCalibrationCoefficient"
@@ -69,6 +73,8 @@ final class ProfileStore: ObservableObject {
         sex = d.string(forKey: K.sex) ?? "male"
         weightKg = d.object(forKey: K.weight) as? Double ?? 75
         heightCm = d.object(forKey: K.height) as? Double ?? 178
+        weightFromHealth = d.object(forKey: K.weightFromHealth) as? Bool ?? false
+        heightFromHealth = d.object(forKey: K.heightFromHealth) as? Bool ?? false
         waistCm = d.object(forKey: K.waist) as? Double ?? 0
         hrMaxOverride = d.object(forKey: K.hrMax) as? Int ?? 0
         stepTicksPerStep = min(max(d.object(forKey: K.stepScale) as? Double ?? 1.0, 0.5), 30.0)
@@ -113,6 +119,47 @@ final class ProfileStore: ObservableObject {
 
     /// Tanaka estimate unless overridden.
     var hrMax: Int { hrMaxOverride > 0 ? hrMaxOverride : Int((208 - 0.7 * Double(age)).rounded()) }
+
+    /// Mirror trusted profile values from Apple Health / Health exports into the local profile.
+    /// Height and weight stay Health-owned once a real measurement arrives.
+    @discardableResult
+    func applyHealthProfile(age newAge: Int? = nil,
+                            sex newSex: String? = nil,
+                            weightKg newWeightKg: Double? = nil,
+                            heightCm newHeightCm: Double? = nil) -> Bool {
+        var changed = false
+        if let newAge, (13...100).contains(newAge), age != newAge {
+            age = newAge
+            changed = true
+        }
+        if let newSex = newSex?.lowercased(),
+           ["male", "female", "nonbinary"].contains(newSex),
+           sex != newSex {
+            sex = newSex
+            changed = true
+        }
+        if let newWeightKg, newWeightKg.isFinite, (30...250).contains(newWeightKg) {
+            if abs(weightKg - newWeightKg) >= 0.05 {
+                weightKg = (newWeightKg * 10).rounded() / 10
+                changed = true
+            }
+            if !weightFromHealth {
+                weightFromHealth = true
+                changed = true
+            }
+        }
+        if let newHeightCm, newHeightCm.isFinite, (120...230).contains(newHeightCm) {
+            if abs(heightCm - newHeightCm) >= 0.5 {
+                heightCm = newHeightCm.rounded()
+                changed = true
+            }
+            if !heightFromHealth {
+                heightFromHealth = true
+                changed = true
+            }
+        }
+        return changed
+    }
 
     /// Allowed range for the step-calibration divisor (#132). 5/MG straps overcount by
     /// up to ~24×, so the old 4.0 ceiling could never reach the truth.

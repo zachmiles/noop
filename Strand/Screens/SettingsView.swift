@@ -281,25 +281,19 @@ struct SettingsView: View {
                 }
                 rowDivider
                 FormRow(label: "Weight") {
-                    // Imperial mode steps in pounds and stores the kg equivalent; metric steps in kg.
-                    if unitSystem == .imperial {
-                        poundsField(weightKg: $profile.weightKg)
-                    } else {
-                        measureField(value: $profile.weightKg, unit: "kg",
-                                     range: 30...250, step: 0.5, format: "%.1f",
-                                     accessibility: "Weight in kilograms")
-                    }
+                    healthProfileField(
+                        value: profile.weightFromHealth
+                            ? UnitFormatter.massFromKilograms(profile.weightKg, system: unitSystem)
+                            : nil,
+                        accessibility: "Weight")
                 }
                 rowDivider
                 FormRow(label: "Height") {
-                    // Imperial mode steps in whole inches and stores the cm equivalent; metric steps in cm.
-                    if unitSystem == .imperial {
-                        feetInchesField(heightCm: $profile.heightCm)
-                    } else {
-                        measureField(value: $profile.heightCm, unit: "cm",
-                                     range: 120...230, step: 1, format: "%.0f",
-                                     accessibility: "Height in centimetres")
-                    }
+                    healthProfileField(
+                        value: profile.heightFromHealth
+                            ? UnitFormatter.heightFromCentimeters(profile.heightCm, system: unitSystem)
+                            : nil,
+                        accessibility: "Height")
                 }
                 rowDivider
                 // Waist (optional). Unlike the rows above it, an empty waist is valid (0 = unset) —
@@ -401,71 +395,9 @@ struct SettingsView: View {
         return "Not calibrated"
     }
 
-    /// Numeric weight/height field: tabular value + small +/- stepper.
-    private func measureField(value: Binding<Double>, unit: String,
-                              range: ClosedRange<Double>, step: Double,
-                              format: String, accessibility: String) -> some View {
-        HStack(spacing: 10) {
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(String(format: format, value.wrappedValue))
-                    .font(StrandFont.bodyNumber)
-                    .foregroundStyle(StrandPalette.textPrimary)
-                    .frame(minWidth: 48, alignment: .trailing)
-                Text(unit)
-                    .font(StrandFont.caption)
-                    .foregroundStyle(StrandPalette.textTertiary)
-            }
-            Stepper(accessibility, value: value, in: range, step: step)
-                .labelsHidden()
-                .accessibilityLabel(accessibility)
-        }
-    }
-
-    /// Imperial weight entry: shows pounds, steps in 1-lb increments, and writes the kg equivalent back
-    /// to the SI-stored profile. Range mirrors the metric 30…250 kg (≈66…551 lb).
-    private func poundsField(weightKg: Binding<Double>) -> some View {
-        let lb = Binding<Double>(
-            get: { UnitFormatter.kgToPounds(weightKg.wrappedValue) },
-            set: { weightKg.wrappedValue = $0 / UnitFormatter.poundsPerKilogram }
-        )
-        return HStack(spacing: 10) {
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(String(format: "%.0f", lb.wrappedValue))
-                    .font(StrandFont.bodyNumber)
-                    .foregroundStyle(StrandPalette.textPrimary)
-                    .frame(minWidth: 48, alignment: .trailing)
-                Text("lb")
-                    .font(StrandFont.caption)
-                    .foregroundStyle(StrandPalette.textTertiary)
-            }
-            Stepper("Weight in pounds", value: lb, in: 66...551, step: 1)
-                .labelsHidden()
-                .accessibilityLabel("Weight, \(Int(lb.wrappedValue.rounded())) pounds")
-        }
-    }
-
-    /// Imperial height entry: shows feet′ inches″, steps in whole inches, and writes the cm equivalent
-    /// back to the SI-stored profile. Range mirrors the metric 120…230 cm (≈47…91 in).
-    private func feetInchesField(heightCm: Binding<Double>) -> some View {
-        let inches = Binding<Double>(
-            get: { UnitFormatter.cmToInches(heightCm.wrappedValue).rounded() },
-            set: { heightCm.wrappedValue = $0 * UnitFormatter.centimetersPerInch }
-        )
-        let parts = UnitFormatter.cmToFeetInches(heightCm.wrappedValue)
-        return HStack(spacing: 10) {
-            Text("\(parts.feet)′ \(parts.inches)″")
-                .font(StrandFont.bodyNumber)
-                .foregroundStyle(StrandPalette.textPrimary)
-                .frame(minWidth: 56, alignment: .trailing)
-            Stepper("Height in inches", value: inches, in: 47...91, step: 1)
-                .labelsHidden()
-                .accessibilityLabel("Height, \(parts.feet) feet \(parts.inches) inches")
-        }
-    }
-
     /// Metric waist entry: 0 = unset (shows a muted "Not set" rather than a misleading 0 cm). Steps in
     /// 1-cm increments; the first increment from unset lands at a sensible 80 cm so the stepper doesn't
-    /// crawl up from the range floor. Mirrors `measureField` but tolerant of the optional empty state.
+    /// crawl up from the range floor.
     private func waistCentimetresField(waistCm: Binding<Double>) -> some View {
         let set = waistCm.wrappedValue > 0
         return HStack(spacing: 10) {
@@ -537,6 +469,21 @@ struct SettingsView: View {
                 .labelsHidden()
                 .accessibilityLabel("Max heart rate override, \(profile.hrMaxOverride == 0 ? "automatic" : "\(profile.hrMaxOverride) bpm")")
         }
+    }
+
+    private func healthProfileField(value: String?, accessibility: String) -> some View {
+        HStack(spacing: 10) {
+            Text(value ?? "—")
+                .font(StrandFont.bodyNumber)
+                .foregroundStyle(value == nil ? StrandPalette.textTertiary : StrandPalette.textPrimary)
+                .frame(minWidth: 64, alignment: .trailing)
+            Label("Health", systemImage: "heart.fill")
+                .font(StrandFont.caption)
+                .foregroundStyle(StrandPalette.textTertiary)
+                .labelStyle(.titleAndIcon)
+        }
+        .accessibilityLabel(value.map { "\(accessibility), \($0) from Health" }
+                            ?? "\(accessibility), no Health measurement")
     }
 
     // MARK: - Units

@@ -3,6 +3,7 @@ import Combine
 import WhoopProtocol
 import WhoopStore
 import StrandAnalytics
+import StrandImport
 #if os(iOS)
 import UserNotifications
 #endif
@@ -1492,11 +1493,12 @@ final class AppModel: ObservableObject {
                         self?.applyAppleHealthImportProgress(event)
                     }
                 }
-                let summary = try await Task.detached(priority: .utility) {
+                let outcome = try await Task.detached(priority: .utility) {
                     try await AppleHealthImport.importExport(url: local.url, into: store,
                                                             deviceId: deviceId,
                                                             progress: progressHandler)
                 }.value
+                applyImportedAppleHealthProfile(outcome.profile)
                 appleHealthImportProgress = AppleHealthImportProgress(
                     step: "Compacting database",
                     detail: "Finishing bulk writes…")
@@ -1506,7 +1508,7 @@ final class AppModel: ObservableObject {
                     detail: "Loading the newly imported Apple Health rows…")
                 await repo.refresh()
                 startAppleHealthProjection(reset: true)
-                finishImport(.appleHealth, summary: "Imported \(summary.recordCount) records")
+                finishImport(.appleHealth, summary: "Imported \(outcome.summary.recordCount) records")
             } catch {
                 appleHealthImportProgress = AppleHealthImportProgress(
                     step: "Apple Health import failed",
@@ -1514,6 +1516,28 @@ final class AppModel: ObservableObject {
                 finishImport(.appleHealth, summary: "Import failed: \(error)", failed: true)
             }
         }
+    }
+
+    private func applyImportedAppleHealthProfile(_ healthProfile: AppleHealthProfile?) {
+        guard let healthProfile else { return }
+        let age = healthProfile.dateOfBirth.flatMap(Self.ageFromAppleHealthBirthDate)
+        _ = profile.applyHealthProfile(age: age,
+                                       sex: healthProfile.biologicalSex,
+                                       weightKg: healthProfile.weightKg,
+                                       heightCm: healthProfile.heightCm)
+    }
+
+    private nonisolated static func ageFromAppleHealthBirthDate(_ raw: String) -> Int? {
+        let trimmed = String(raw.prefix(10))
+        guard !trimmed.isEmpty else { return nil }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        formatter.dateFormat = "yyyy-MM-dd"
+        guard let birthDate = formatter.date(from: trimmed) else { return nil }
+        let age = Calendar.current.dateComponents([.year], from: birthDate, to: Date()).year
+        return age.flatMap { (13...100).contains($0) ? $0 : nil }
     }
 
     // MARK: - Storage diagnostics (#590 — StorageView)

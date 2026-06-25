@@ -2956,16 +2956,18 @@ struct TodayView: View {
         return unit.isEmpty ? n : "\(n) \(unit)"
     }
 
-    /// The Weight tile's display string + an honest caption ("from profile" only on the fallback).
+    /// The Weight tile's display string + an honest caption.
     /// Prefers a real Apple-Health reading (today's daily, else the "weight" series' newest point so a
-    /// sparse-but-recent value still renders); when neither carries a weight, falls back to the user's
-    /// self-reported profile weight instead of "—" (#204). Always formatted through the shared
-    /// `UnitFormatter` so the Imperial/Metric toggle reaches this tile. Mirrors Android's `weightTile`.
+    /// sparse-but-recent value still renders); when neither carries a weight, only uses the profile
+    /// value if that profile value was mirrored from Health.
     private func weightTile(_ appleWeightKg: Double?) -> (value: String, caption: String) {
         if let kg = sparks["weight"]?.last ?? appleWeightKg {
             return (UnitFormatter.massFromKilograms(kg, system: unitSystem), "latest")
         }
-        return (UnitFormatter.massFromKilograms(profile.weightKg, system: unitSystem), "from profile")
+        if profile.weightFromHealth {
+            return (UnitFormatter.massFromKilograms(profile.weightKg, system: unitSystem), "from Health")
+        }
+        return ("—", "Health")
     }
 
     // MARK: - Derived text

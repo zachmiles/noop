@@ -49,6 +49,7 @@ struct StrandiOSApp: App {
         _model = StateObject(wrappedValue: model)
         _health = StateObject(wrappedValue: HealthKitBridge(
             repo: model.repo,
+            profile: model.profile,
             appleDeviceId: model.appleDeviceId,
             noopDeviceId: model.deviceId
         ))

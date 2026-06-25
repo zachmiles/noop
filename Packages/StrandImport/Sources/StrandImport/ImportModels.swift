@@ -82,6 +82,32 @@ public struct HealthSample: Sendable, Equatable, Hashable {
     }
 }
 
+/// Profile fields Apple Health exposes outside ordinary daily metrics.
+public struct AppleHealthProfile: Sendable, Equatable, Codable {
+    /// `yyyy-MM-dd` as exported by Health, when present.
+    public var dateOfBirth: String?
+    /// Normalized to `male`, `female`, or `nonbinary` when present.
+    public var biologicalSex: String?
+    /// Latest exported height reading, normalized to centimetres.
+    public var heightCm: Double?
+    /// Latest exported weight reading, normalized to kilograms.
+    public var weightKg: Double?
+
+    public init(dateOfBirth: String? = nil,
+                biologicalSex: String? = nil,
+                heightCm: Double? = nil,
+                weightKg: Double? = nil) {
+        self.dateOfBirth = dateOfBirth
+        self.biologicalSex = biologicalSex
+        self.heightCm = heightCm
+        self.weightKg = weightKg
+    }
+
+    public var hasAnyValue: Bool {
+        dateOfBirth != nil || biologicalSex != nil || heightCm != nil || weightKg != nil
+    }
+}
+
 // MARK: - Apple Health workout
 
 /// A normalized Apple Health `<Workout>` element.
@@ -651,6 +677,7 @@ public struct AppleHealthImportResult: Sendable, Equatable {
     public var workouts: [HealthWorkout]
     public var sleepIntervals: [SleepStageInterval]
     public var summary: ImportSummary
+    public var profile: AppleHealthProfile?
     /// Pre-aggregated per-day sample rows, folded incrementally by the importer
     /// so a multi-year export never has to retain the raw `samples` array in RAM
     /// (issue #355). When the importer kept raw samples (`retainRawSamples:true`,
@@ -665,12 +692,14 @@ public struct AppleHealthImportResult: Sendable, Equatable {
         workouts: [HealthWorkout],
         sleepIntervals: [SleepStageInterval],
         summary: ImportSummary,
+        profile: AppleHealthProfile? = nil,
         sampleDailies: [AppleDailyAggregate] = []
     ) {
         self.samples = samples
         self.workouts = workouts
         self.sleepIntervals = sleepIntervals
         self.summary = summary
+        self.profile = profile
         self.sampleDailies = sampleDailies
     }
 }

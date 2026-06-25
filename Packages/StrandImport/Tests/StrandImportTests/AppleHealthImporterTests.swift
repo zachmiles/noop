@@ -28,6 +28,25 @@ final class AppleHealthImporterTests: XCTestCase {
         XCTAssertFalse(types.contains("DietaryWater"))
     }
 
+    func testProfileFieldsParsedFromMeAndLatestBodyRecords() throws {
+        let xml = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <HealthData>
+         <Me HKCharacteristicTypeIdentifierDateOfBirth="1988-04-05" HKCharacteristicTypeIdentifierBiologicalSex="HKBiologicalSexFemale"/>
+         <Record type="HKQuantityTypeIdentifierHeight" sourceName="Health" unit="cm" startDate="2024-01-01 08:00:00 +0000" endDate="2024-01-01 08:00:00 +0000" value="171"/>
+         <Record type="HKQuantityTypeIdentifierHeight" sourceName="Health" unit="in" startDate="2024-02-01 08:00:00 +0000" endDate="2024-02-01 08:00:00 +0000" value="68"/>
+         <Record type="HKQuantityTypeIdentifierBodyMass" sourceName="Scale" unit="lb" startDate="2024-01-01 08:00:00 +0000" endDate="2024-01-01 08:00:00 +0000" value="170"/>
+         <Record type="HKQuantityTypeIdentifierBodyMass" sourceName="Scale" unit="kg" startDate="2024-02-01 08:00:00 +0000" endDate="2024-02-01 08:00:00 +0000" value="76"/>
+        </HealthData>
+        """
+        let r = try AppleHealthImporter().importXML(data: Data(xml.utf8))
+        let profile = try XCTUnwrap(r.profile)
+        XCTAssertEqual(profile.dateOfBirth, "1988-04-05")
+        XCTAssertEqual(profile.biologicalSex, "female")
+        XCTAssertEqual(profile.heightCm!, 172.72, accuracy: 1e-9)
+        XCTAssertEqual(profile.weightKg!, 76, accuracy: 1e-9)
+    }
+
     // MARK: - OxygenSaturation ×100
 
     func testOxygenSaturationFractionScaledToPercent() throws {

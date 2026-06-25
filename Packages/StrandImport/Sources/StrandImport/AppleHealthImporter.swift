@@ -55,6 +55,7 @@ public struct AppleHealthImporter {
         "BasalEnergyBurned",
         "VO2Max",
         "StepCount",
+        "Height",
         "SleepAnalysis",
         // Body composition
         "BodyMass",
@@ -257,6 +258,7 @@ final class HealthXMLDelegate: NSObject, XMLParserDelegate {
     private(set) var workouts: [HealthWorkout] = []
     private(set) var sleepIntervals: [SleepStageInterval] = []
     private(set) var countsByType: [String: Int] = [:]
+    private(set) var profile = AppleHealthProfile()
     private(set) var parseError: Error?
 
     /// Running per-day fold of every (deduped) sample. Always maintained — it is
@@ -288,6 +290,8 @@ final class HealthXMLDelegate: NSObject, XMLParserDelegate {
 
     // Dedupe set over HealthSample dedupeKeys.
     private var seenSampleKeys: Set<String> = []
+    private var latestHeightAt: Date?
+    private var latestWeightAt: Date?
 
     /// True once at least one usable record/workout/sleep row was parsed. Drives the tolerant-parse
     /// decision: a hard error AFTER real data was seen keeps the partial result instead of failing.
@@ -317,6 +321,9 @@ final class HealthXMLDelegate: NSObject, XMLParserDelegate {
             switch elementName {
             case "Correlation":
                 correlationDepth += 1
+
+            case "Me":
+                handleMe(attributeDict)
 
             case "Record":
                 // Skip records nested inside a Correlation (deduped to top-level).
@@ -423,6 +430,12 @@ final class HealthXMLDelegate: NSObject, XMLParserDelegate {
         if type == "OxygenSaturation", let v = numeric {
             numeric = v * 100.0
         }
+        captureProfileQuantity(type: type, value: numeric, unit: unit, at: end)
+        if type == "Height" {
+            countsByType[type, default: 0] += 1
+            reportProgress(latestType: type)
+            return
+        }
 
         appendSample(
             type: type,
@@ -436,6 +449,58 @@ final class HealthXMLDelegate: NSObject, XMLParserDelegate {
         )
         countsByType[type, default: 0] += 1
         reportProgress(latestType: type)
+    }
+
+    private func handleMe(_ attrs: [String: String]) {
+        if let dob = attrs["HKCharacteristicTypeIdentifierDateOfBirth"] ?? attrs["DateOfBirth"],
+           !dob.isEmpty {
+            profile.dateOfBirth = String(dob.prefix(10))
+        }
+        if let rawSex = attrs["HKCharacteristicTypeIdentifierBiologicalSex"] ?? attrs["BiologicalSex"],
+           let normalized = normalizeBiologicalSex(rawSex) {
+            profile.biologicalSex = normalized
+        }
+    }
+
+    private func captureProfileQuantity(type: String, value: Double?, unit: String?, at date: Date) {
+        guard let value else { return }
+        switch type {
+        case "Height":
+            guard let cm = centimeters(value, unit: unit) else { return }
+            if latestHeightAt == nil || latestHeightAt! <= date {
+                profile.heightCm = cm
+                latestHeightAt = date
+            }
+        case "BodyMass":
+            let kg = AppleHealthAggregator.unitLooksLikePounds(unit) ? value * 0.453592 : value
+            if latestWeightAt == nil || latestWeightAt! <= date {
+                profile.weightKg = kg
+                latestWeightAt = date
+            }
+        default:
+            break
+        }
+    }
+
+    private func normalizeBiologicalSex(_ raw: String) -> String? {
+        let lower = raw.lowercased()
+        if lower.contains("male"), !lower.contains("female") { return "male" }
+        if lower.contains("female") { return "female" }
+        if lower.contains("other") { return "nonbinary" }
+        if lower.contains("notset") { return nil }
+        return nil
+    }
+
+    private func centimeters(_ value: Double, unit: String?) -> Double? {
+        guard value.isFinite, value > 0 else { return nil }
+        let u = unit?.lowercased() ?? "cm"
+        if u == "cm" || u.contains("centimeter") { return value }
+        if u == "m" || u == "meter" || u == "metre" || u.contains("meter") || u.contains("metre") {
+            return value * 100.0
+        }
+        if u == "in" || u.contains("inch") { return value * 2.54 }
+        if u == "ft" || u.contains("foot") || u.contains("feet") { return value * 30.48 }
+        return value
     }
 
     private func appendSample(
@@ -559,6 +624,7 @@ final class HealthXMLDelegate: NSObject, XMLParserDelegate {
             workouts: workouts,
             sleepIntervals: sleepIntervals,
             summary: summary,
+            profile: profile.hasAnyValue ? profile : nil,
             sampleDailies: dailyAcc.finish()
         )
     }
